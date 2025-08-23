@@ -1,0 +1,2 @@
+[console_scripts]
+jira-cli = jira_cli.main:app

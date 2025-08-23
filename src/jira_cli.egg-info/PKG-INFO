@@ -1,0 +1,283 @@
+Metadata-Version: 2.4
+Name: jira-cli
+Version: 0.1.0
+Summary: Command Line Interface for Jira REST API operations
+Author-email: AccelERP Team <team@accelerp.com>
+Project-URL: Homepage, https://github.com/accelerp/jira-cli
+Project-URL: Repository, https://github.com/accelerp/jira-cli
+Project-URL: Issues, https://github.com/accelerp/jira-cli/issues
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: typer>=0.9.0
+Requires-Dist: requests>=2.28.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: colorama>=0.4.6
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: isort>=5.12.0; extra == "dev"
+Requires-Dist: flake8>=6.0.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+
+# Jira CLI
+
+A command-line interface for Jira REST API operations, built with Python and Typer.
+
+## Features
+
+- **Issue Management**: Search, create, update, assign, and transition issues
+- **Epic Management**: Create stories under epics, link existing stories to epics, list epic stories
+- **Project Operations**: List projects, versions, components, and issue types
+- **Authentication**: Secure API token authentication
+- **Enhanced Tables**: Display issue types and improved formatting
+- **Flexible Output**: JSON, table, and detailed views
+- **Quick Commands**: Shortcuts for common operations like listing epics and your issues
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8 or higher
+- Jira Cloud or Server with REST API access
+- Jira API token (for Jira Cloud) or Personal Access Token (for Jira Server/DC)
+
+### Install from Source
+
+```bash
+git clone <repository>
+cd jira-cli
+./install.sh
+```
+
+Or install manually:
+
+```bash
+pip install -e .
+```
+
+## Configuration
+
+Set the required environment variables:
+
+```bash
+# Required
+export JIRA_EMAIL="your.email@example.com"
+export JIRA_API_TOKEN="your_api_token"
+
+# Optional (defaults to acceldevs.atlassian.net)
+export JIRA_URL="https://your-domain.atlassian.net"
+```
+
+### Getting an API Token
+
+1. Go to [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
+2. Click "Create API token"
+3. Copy the generated token and set it as `JIRA_API_TOKEN`
+
+## Usage
+
+### Basic Commands
+
+```bash
+# Show help
+jira-cli --help
+
+# Test connection
+jira-cli auth test
+
+# Show current user
+jira-cli auth whoami
+
+# Show configuration
+jira-cli config
+```
+
+### Issue Operations
+
+```bash
+# Search issues with JQL
+jira-cli search "project = PD AND assignee = currentUser()"
+jira-cli issues search "project = PD" --table
+jira-cli issues search "status = 'In Progress'" --json
+
+# Get specific issue
+jira-cli issues get PD-123
+jira-cli issues get PD-123 --detail
+
+# Create issue
+jira-cli issues create --project PD --summary "New task" --type Task
+
+# Create story under epic (NEW!)
+jira-cli issues create --project PD --summary "New story" --type Story --epic PD-1
+
+# Update issue
+jira-cli issues update PD-123 --summary "Updated summary"
+
+# Link existing story to epic (NEW!)
+jira-cli issues update PD-123 --epic PD-1
+
+# Assign issue
+jira-cli issues assign PD-123 user_account_id
+jira-cli issues assign PD-123 none  # Unassign
+
+# Get available transitions
+jira-cli issues transitions PD-123
+
+# Transition issue
+jira-cli issues transition PD-123 transition_id
+
+# Add comment
+jira-cli issues comment PD-123 "This is a comment"
+
+# List all stories under an epic (NEW!)
+jira-cli issues epic-stories PD-1 --table
+```
+
+### Epic Management (NEW!)
+
+```bash
+# Create epic
+jira-cli issues create --project PD --summary "New Epic" --type Epic --description "Epic description"
+
+# Create story under epic
+jira-cli issues create --project PD --summary "Story under epic" --type Story --epic PD-1
+
+# Link existing story to epic
+jira-cli issues update PD-5 --epic PD-1
+
+# List all stories under an epic
+jira-cli issues epic-stories PD-1 --table
+jira-cli issues epic-stories PD-1 --json
+
+# List all epics in project
+jira-cli epics --project PD --table
+```
+
+### Quick Commands
+
+```bash
+# List your issues
+jira-cli my-issues
+jira-cli my-issues --project PD
+jira-cli my-issues --status "In Progress"
+
+# List epics
+jira-cli epics
+jira-cli epics --project PD
+```
+
+### Project Operations
+
+```bash
+# List projects
+jira-cli projects list
+jira-cli projects list --table
+
+# Get project details
+jira-cli projects get ACCELERP
+
+# List issue types
+jira-cli projects issue-types --table
+
+# List project versions
+jira-cli projects versions ACCELERP
+
+# List project components
+jira-cli projects components ACCELERP
+```
+
+## Output Formats
+
+The CLI supports multiple output formats:
+
+- **JSON** (default): Raw JSON response from Jira API
+- **Table**: Formatted table view (use `--table` flag)
+- **Detail**: Rich formatted view for single items (use `--detail` flag)
+
+## Common JQL Examples
+
+```bash
+# Issues assigned to you
+jira-cli search "assignee = currentUser()"
+
+# Open issues in a project
+jira-cli search "project = PD AND status != Done"
+
+# High priority bugs
+jira-cli search "project = PD AND priority = High AND issuetype = Bug"
+
+# Recent updates
+jira-cli search "project = PD AND updated >= -1w"
+
+# All epics in project
+jira-cli search "project = PD AND issuetype = Epic"
+
+# All stories under a specific epic (NEW!)
+jira-cli search "project = PD AND parent = PD-1"
+
+# Stories without epic assignment (NEW!)
+jira-cli search "project = PD AND issuetype = Story AND parent is EMPTY"
+
+# Issues by type with enhanced table view (NEW!)
+jira-cli search "project = PD AND issuetype in (Epic, Story, Task)" --table
+```
+
+## Error Handling
+
+The CLI provides clear error messages for common issues:
+
+- Authentication failures
+- Missing environment variables
+- Invalid JQL queries
+- Network connectivity issues
+- Permission errors
+
+## Development
+
+### Project Structure
+
+```
+jira-cli/
+├── src/jira_cli/
+│   ├── commands/          # Command modules
+│   │   ├── issues.py      # Issue operations
+│   │   ├── projects.py    # Project operations
+│   │   └── auth.py        # Authentication
+│   ├── utils/             # Utilities
+│   │   ├── api.py         # API client
+│   │   ├── auth.py        # Authentication helpers
+│   │   └── formatting.py  # Output formatting
+│   ├── models.py          # Data models
+│   ├── exceptions.py      # Custom exceptions
+│   └── main.py           # Main CLI entry point
+├── tests/                 # Test files
+├── pyproject.toml        # Project configuration
+└── README.md
+```
+
+### Running Tests
+
+```bash
+pytest
+```
+
+### Code Formatting
+
+```bash
+black src/
+isort src/
+```
+
+## License
+
+MIT License
