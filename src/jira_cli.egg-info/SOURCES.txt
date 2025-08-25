@@ -19,3 +19,4 @@ src/jira_cli/utils/__init__.py
 src/jira_cli/utils/api.py
 src/jira_cli/utils/auth.py
 src/jira_cli/utils/formatting.py
+src/jira_cli/utils/markdown_to_adf.py

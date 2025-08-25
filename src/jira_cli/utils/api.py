@@ -190,32 +190,250 @@ class JiraApiClient:
         
         return self.post(f'issue/{issue_key}/transitions', data)
     
-    def add_comment(self, issue_key: str, body: str) -> Dict[str, Any]:
-        """Add comment to issue.
+    def search_users(self, query: str, max_results: int = 50) -> List[Dict[str, Any]]:
+        """Search for users by email, name, or account ID.
+        
+        Args:
+            query: Search query (email, display name, or account ID)
+            max_results: Maximum number of results
+            
+        Returns:
+            List of user data
+        """
+        params = {
+            'query': query,
+            'maxResults': max_results
+        }
+        return self.get('user/search', params)
+    
+    def get_user_by_account_id(self, account_id: str) -> Dict[str, Any]:
+        """Get user details by account ID.
+        
+        Args:
+            account_id: User account ID
+            
+        Returns:
+            User data
+        """
+        params = {'accountId': account_id}
+        return self.get('user', params)
+    
+    def _parse_mentions_in_text(self, text: str) -> List[Dict[str, Any]]:
+        """Parse mentions in text and create ADF content nodes.
+        
+        Args:
+            text: Text that may contain mentions like @username or @email@domain.com
+            
+        Returns:
+            List of ADF content nodes
+        """
+        import re
+        
+        content_nodes = []
+        last_end = 0
+        
+        # Pattern to match @username, @email@domain.com, or @accountid:ACCOUNT_ID
+        mention_pattern = r'@(?:accountid:([a-f0-9\-]{36})|([a-zA-Z0-9._-]+(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?|[a-zA-Z0-9._-]+))'
+        
+        for match in re.finditer(mention_pattern, text):
+            start, end = match.span()
+            
+            # Add text before mention
+            if start > last_end:
+                content_nodes.append({
+                    "type": "text",
+                    "text": text[last_end:start]
+                })
+            
+            # Extract account ID or search query
+            account_id = match.group(1)  # accountid:xxx format
+            search_query = match.group(2)  # username or email format
+            
+            if account_id:
+                # Direct account ID provided
+                try:
+                    user = self.get_user_by_account_id(account_id)
+                    content_nodes.append({
+                        "type": "mention",
+                        "attrs": {
+                            "id": account_id,
+                            "text": f"@{user.get('displayName', 'User')}"
+                        }
+                    })
+                except:
+                    # If user lookup fails, treat as regular text
+                    content_nodes.append({
+                        "type": "text",
+                        "text": match.group(0)
+                    })
+            elif search_query:
+                # Search for user by email or username
+                try:
+                    users = self.search_users(search_query, max_results=1)
+                    if users:
+                        user = users[0]
+                        content_nodes.append({
+                            "type": "mention",
+                            "attrs": {
+                                "id": user['accountId'],
+                                "text": f"@{user.get('displayName', search_query)}"
+                            }
+                        })
+                    else:
+                        # No user found, treat as regular text
+                        content_nodes.append({
+                            "type": "text",
+                            "text": match.group(0)
+                        })
+                except:
+                    # If search fails, treat as regular text
+                    content_nodes.append({
+                        "type": "text",
+                        "text": match.group(0)
+                    })
+            
+            last_end = end
+        
+        # Add remaining text
+        if last_end < len(text):
+            content_nodes.append({
+                "type": "text",
+                "text": text[last_end:]
+            })
+        
+        return content_nodes
+
+    def add_comment(self, issue_key: str, body: str, parse_mentions: bool = True, is_markdown: bool = True) -> Dict[str, Any]:
+        """Add comment to issue with optional mention support and markdown parsing.
         
         Args:
             issue_key: Issue key
-            body: Comment text
+            body: Comment text (may contain mentions like @username or @email@domain.com and markdown)
+            parse_mentions: Whether to parse and convert mentions to ADF format
+            is_markdown: Whether to parse body as markdown
             
         Returns:
             Created comment data
         """
-        # Convert plain text to Atlassian Document Format (ADF)
+        if is_markdown and not parse_mentions:
+            # Use full markdown parsing (without mention support)
+            from .markdown_to_adf import markdown_to_adf
+            adf_body = markdown_to_adf(body)
+        elif parse_mentions:
+            # Parse mentions in text (existing behavior)
+            content_nodes = self._parse_mentions_in_text(body)
+            adf_body = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": content_nodes
+                    }
+                ]
+            }
+        else:
+            # Simple text without mention or markdown parsing
+            content_nodes = [{
+                "text": body,
+                "type": "text"
+            }]
+            adf_body = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": content_nodes
+                    }
+                ]
+            }
+        
+        return self.post(f'issue/{issue_key}/comment', {'body': adf_body})
+    
+    def add_comment_with_mentions(self, issue_key: str, body: str, mentions: List[str]) -> Dict[str, Any]:
+        """Add comment to issue with explicit mentions.
+        
+        Args:
+            issue_key: Issue key
+            body: Comment text
+            mentions: List of account IDs, emails, or usernames to mention
+            
+        Returns:
+            Created comment data
+        """
+        content_nodes = []
+        
+        # Add main comment text
+        if body:
+            content_nodes.append({
+                "type": "text",
+                "text": body
+            })
+        
+        # Add mentions
+        for mention in mentions:
+            if body:  # Add space before mentions if there's body text
+                content_nodes.append({
+                    "type": "text", 
+                    "text": " "
+                })
+            
+            # Check if mention is already an account ID (UUID format)
+            if len(mention) == 36 and '-' in mention:
+                # Direct account ID
+                try:
+                    user = self.get_user_by_account_id(mention)
+                    content_nodes.extend([
+                        {
+                            "type": "mention",
+                            "attrs": {
+                                "id": mention,
+                                "text": f"@{user.get('displayName', 'User')}"
+                            }
+                        }
+                    ])
+                except:
+                    content_nodes.append({
+                        "type": "text",
+                        "text": f"@{mention}"
+                    })
+            else:
+                # Search for user
+                try:
+                    users = self.search_users(mention, max_results=1)
+                    if users:
+                        user = users[0]
+                        content_nodes.append({
+                            "type": "mention",
+                            "attrs": {
+                                "id": user['accountId'],
+                                "text": f"@{user.get('displayName', mention)}"
+                            }
+                        })
+                    else:
+                        content_nodes.append({
+                            "type": "text",
+                            "text": f"@{mention}"
+                        })
+                except:
+                    content_nodes.append({
+                        "type": "text",
+                        "text": f"@{mention}"
+                    })
+        
+        # Create ADF document
         adf_body = {
             "type": "doc",
             "version": 1,
             "content": [
                 {
                     "type": "paragraph",
-                    "content": [
-                        {
-                            "text": body,
-                            "type": "text"
-                        }
-                    ]
+                    "content": content_nodes
                 }
             ]
         }
+        
         return self.post(f'issue/{issue_key}/comment', {'body': adf_body})
     
     def delete_issue(self, issue_key: str) -> Dict[str, Any]:
@@ -257,8 +475,8 @@ class JiraApiClient:
         """
         # Add parent reference to the subtask data
         subtask_data['fields']['parent'] = {'key': parent_issue_key}
-        # Set issue type to Sub-task
-        subtask_data['fields']['issuetype'] = {'name': 'Sub-task'}
+        # Set issue type to Subtask
+        subtask_data['fields']['issuetype'] = {'name': 'Subtask'}
         
         return self.create_issue(subtask_data)
     

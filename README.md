@@ -9,6 +9,9 @@ A comprehensive command-line interface for Jira REST API operations, built with 
 - **🔧 Subtask Management**: Create, list, link, and unlink subtasks for better task breakdown
 - **📅 Timeline Management**: Set due dates, track project timelines, timeline-based filtering
 - **🏗️ Project Operations**: List projects, get project details, manage versions, components, and issue types
+- **👥 User Management**: Search users, mention users in comments with automatic lookup
+- **💬 Smart Comments**: Add comments with @mention support for better collaboration
+- **📝 Markdown Support**: Full markdown parsing for descriptions and comments with ADF conversion
 - **🔐 Authentication**: Secure API token authentication with connection testing
 - **📊 Rich Output**: Enhanced tables, detailed views, JSON output, and beautiful formatting
 - **⚡ Quick Commands**: Shortcuts for common operations (my-issues, epics, subtasks, search)
@@ -41,6 +44,14 @@ git clone https://github.com/AccelTechnology/jira-cli.git
 cd jira-cli
 chmod +x install.sh
 ./install.sh
+```
+
+#### 🐍 Python Install Script
+
+```bash
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+python install.py
 ```
 
 ### Manual Installation Options
@@ -186,6 +197,35 @@ chmod +x install.sh
 - **macOS**: If you have multiple Python versions, specify the version: `python3.11 -m pip install -e .`
 - **Docker**: You can run jira-cli in a container - see Development section
 
+## Versioning
+
+Jira CLI uses timestamp-based versioning in the format `YYYY.M.D.HHMM` where:
+- `YYYY` - Year (4 digits)
+- `M` - Month (1-2 digits)
+- `D` - Day (1-2 digits) 
+- `HHMM` - Hour and minute (4 digits, 24-hour format)
+
+This ensures each installation has a unique version based on when it was installed.
+
+### Version Information
+
+Check your installation version and details:
+
+```bash
+jira-cli version
+```
+
+Example output:
+```
+Jira CLI version: 2025.8.25.1712
+Author: AccelERP Team (team@accelerp.com)
+Installed: 2025-08-25 at 17:12
+Python: 3.13.2
+Platform: darwin
+```
+
+Development versions (when running from source without installation) show as `dev.YYYY.M.D.HHMM`.
+
 ## Configuration
 
 Set the required environment variables:
@@ -301,8 +341,20 @@ jira-cli issues transitions <project_id>-123 --table
 # Transition issue
 jira-cli issues transition <project_id>-123 transition_id
 
-# Add comment
+# Add simple comment
 jira-cli issues comment <project_id>-123 "This is a comment"
+
+# Add comment with automatic @mention parsing
+jira-cli issues comment <project_id>-123 "Hey @john.doe@company.com, can you review this?"
+
+# Add comment with explicit mentions
+jira-cli issues comment <project_id>-123 "Please review" --mention "john.doe@company.com" --mention "jane.smith"
+
+# Add comment with account ID mention
+jira-cli issues comment <project_id>-123 "Status update @accountid:5b8d8f9e-1234-5678-90ab-cdef12345678"
+
+# Disable automatic mention parsing
+jira-cli issues comment <project_id>-123 "Use @username literally" --no-parse-mentions
 
 # Delete issue (with confirmation)
 jira-cli issues delete <project_id>-123
@@ -442,6 +494,63 @@ jira-cli auth whoami
 jira-cli auth whoami --json
 ```
 
+### User Management & Mentions
+
+```bash
+# Search for users
+jira-cli issues search-users "john" --table
+
+# Search users by email
+jira-cli issues search-users "john.doe@company.com" --table
+
+# Get user account IDs for mentions
+jira-cli issues search-users "jane" --max-results 5 --table
+```
+
+## Smart @Mention Support
+
+The Jira CLI supports intelligent user mentions in comments with multiple formats:
+
+### Mention Formats
+
+1. **Email-based mentions**: `@john.doe@company.com`
+2. **Username mentions**: `@johndoe` 
+3. **Account ID mentions**: `@accountid:5b8d8f9e-1234-5678-90ab-cdef12345678`
+
+### Automatic Mention Parsing
+
+Comments automatically detect and convert @mentions to proper Jira mention nodes:
+
+```bash
+# These mentions are automatically detected and converted:
+jira-cli issues comment PROJ-123 "Hi @john.doe@company.com, please review this PR."
+jira-cli issues comment PROJ-123 "Status update for @projectmanager and @developer"
+jira-cli issues comment PROJ-123 "Issue assigned to @accountid:5b8d8f9e-1234-5678-90ab-cdef12345678"
+```
+
+### Explicit Mentions
+
+For more control, use explicit mention flags:
+
+```bash
+# Mention specific users
+jira-cli issues comment PROJ-123 "Ready for review" \
+  --mention "john.doe@company.com" \
+  --mention "jane.smith@company.com"
+
+# Mix comment text with mentions
+jira-cli issues comment PROJ-123 "Task completed" \
+  --mention "manager@company.com"
+```
+
+### Disable Mention Parsing
+
+To use @ symbols literally without mention conversion:
+
+```bash
+jira-cli issues comment PROJ-123 "Email me @john@company.com" --no-parse-mentions
+```
+
 ## Output Formats
 
 The CLI supports three output formats:
@@ -488,6 +597,177 @@ jira-cli search "project = <project_id> AND issuetype in (Epic, Story, Task, Sub
 
 # Complex timeline queries
 jira-cli search "project = <project_id> AND duedate <= '2025-12-31' ORDER BY priority DESC, duedate ASC" --table
+```
+
+## Markdown Support
+
+The Jira CLI now supports **full markdown parsing** for issue descriptions and comments, automatically converting them to Atlassian Document Format (ADF) for proper rendering in Jira.
+
+### Supported Markdown Elements
+
+- **Headings**: `# H1`, `## H2`, `### H3`, etc.
+- **Text Formatting**: `**bold**`, `*italic*`, `` `inline code` ``
+- **Lists**: 
+  - Unordered: `- item` or `* item`
+  - Ordered: `1. item`
+- **Links**: `[text](url)`
+- **Code Blocks**: 
+  ```
+  ```language
+  code here
+  ```
+  ```
+- **Blockquotes**: `> quoted text`
+- **Horizontal Rules**: `---` or `***`
+
+### Usage Examples
+
+```bash
+# Create issue with markdown description
+jira-cli issues create --project PROJ \
+  --summary "Feature Implementation" \
+  --type Story \
+  --description "# Implementation Plan
+
+## Phase 1: Setup
+- Setup development environment
+- Create **base repository**
+- Install dependencies
+
+## Phase 2: Development  
+- Implement core features
+- Add \`unit tests\`
+- Update [documentation](https://example.com)
+
+### Code Example
+\`\`\`python
+def main():
+    print('Hello, World!')
+\`\`\`
+
+> **Note**: Remember to test thoroughly before deployment!"
+
+# Add markdown comment
+jira-cli issues comment PROJ-123 "## Status Update
+
+Progress on this issue:
+- [x] Backend API completed
+- [ ] Frontend integration *in progress*
+- [ ] Testing pending
+
+Next steps:
+1. Complete UI integration
+2. Run **full test suite**
+3. Deploy to staging
+
+\`\`\`bash
+npm run build && npm run deploy
+\`\`\`"
+
+# Disable markdown parsing (treat as plain text)
+jira-cli issues create --project PROJ \
+  --summary "Plain Text Issue" \
+  --description "This will be treated as plain text with **no** formatting" \
+  --no-markdown
+
+# Comment without markdown
+jira-cli issues comment PROJ-123 "Plain text comment" --no-markdown
+```
+
+### Epic, Story, and Sub-task Workflows with Markdown
+
+```bash
+# Create Epic with rich markdown description
+jira-cli issues create --project PROJ \
+  --summary "User Authentication System" \
+  --type Epic \
+  --description "# Epic: User Authentication System
+
+## Overview
+Implement comprehensive user authentication and authorization system.
+
+## Key Features
+- **Multi-factor authentication** (MFA)
+- *Social login integration*
+- Role-based access control (RBAC)
+
+## Technical Requirements
+- OAuth 2.0 compliance
+- JWT token management  
+- Session handling
+
+### Security Considerations
+> All authentication endpoints must use HTTPS
+> Implement rate limiting for login attempts
+
+## Definition of Done
+- [ ] All authentication methods implemented
+- [ ] Security testing completed
+- [ ] Documentation updated"
+
+# Create Story under Epic with markdown
+jira-cli issues create --project PROJ \
+  --summary "Implement JWT Token Management" \
+  --type Story \
+  --epic PROJ-1 \
+  --description "## User Story
+As a developer, I want JWT token management so that user sessions are secure and scalable.
+
+## Acceptance Criteria
+- Token generation on successful login
+- Automatic token refresh
+- Secure token storage
+
+## Technical Details
+\`\`\`javascript
+// Token structure
+{
+  \"iat\": 1234567890,
+  \"exp\": 1234567890,
+  \"user_id\": \"12345\"
+}
+\`\`\`"
+
+# Create Sub-task with implementation details  
+jira-cli issues create-subtask --parent PROJ-2 \
+  --summary "Create JWT middleware" \
+  --description "### Task: JWT Middleware Implementation
+
+**Files to create:**
+- \`middleware/jwt.js\`
+- \`utils/token.js\`
+- \`config/jwt.json\`
+
+**Implementation steps:**
+1. Install jsonwebtoken package
+2. Create token generation utility
+3. Implement middleware validation
+4. Add error handling
+
+\`\`\`bash
+npm install jsonwebtoken
+\`\`\`
+
+**Testing:**
+- Unit tests for token validation
+- Integration tests with auth endpoints"
+```
+
+### Combining Markdown with Mentions
+
+You can combine markdown formatting with user mentions:
+
+```bash
+jira-cli issues comment PROJ-123 "## Review Required
+
+@john.doe@company.com - Please review the **authentication implementation**.
+
+### Changes Made:
+- Added *password validation*
+- Implemented \`JWT tokens\`
+- Updated [API documentation](https://docs.example.com)
+
+@team-lead@company.com - This is ready for **security review**."
 ```
 
 ## Field Support
@@ -545,8 +825,8 @@ jira-cli issues create --project <project_id> --summary "Daily standup notes" --
 jira-cli issues transitions <project_id>-123
 jira-cli issues transition <project_id>-123 21
 
-# Add progress comment
-jira-cli issues comment <project_id>-123 "Work in progress, 50% complete"
+# Add progress comment with mention
+jira-cli issues comment <project_id>-123 "Work in progress, 50% complete. @manager@company.com please review."
 ```
 
 ### Epic Management
@@ -578,6 +858,9 @@ jira-cli subtasks <project_id>-5 --table
 
 # Convert existing issue to subtask
 jira-cli issues link-subtask <project_id>-10 <project_id>-5
+
+# Add comment to subtask with team mention
+jira-cli issues comment <project_id>-6 "Subtask completed. @team-lead@company.com ready for review."
 ```
 
 ### Project Planning
@@ -602,6 +885,8 @@ jira-cli --help
 jira-cli issues --help
 jira-cli issues create --help
 jira-cli issues create-subtask --help
+jira-cli issues comment --help
+jira-cli issues search-users --help
 jira-cli issues subtasks --help
 jira-cli subtasks --help
 jira-cli projects --help

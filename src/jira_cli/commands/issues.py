@@ -481,3 +481,332 @@ def unlink_subtask(
     except JiraCliError as e:
         print_error(str(e))
         raise typer.Exit(1)
+
+
+# New hierarchical management functions
+
+@app.command("create-epic")
+def create_epic(
+    summary: str = typer.Option(..., "--summary", "-s", help="Epic summary"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Epic description (supports markdown)"),
+    project_key: str = typer.Option("ACCELERP", "--project", "-p", help="Project key"),
+    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee account ID"),
+    labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
+    due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
+    no_markdown: bool = typer.Option(False, "--no-markdown", help="Treat description as plain text (disable markdown parsing)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Create a new epic."""
+    try:
+        client = JiraApiClient()
+        
+        epic_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "issuetype": {"name": "Epic"}
+            }
+        }
+        
+        if description:
+            epic_data["fields"]["description"] = text_to_adf(description)
+        
+        if assignee:
+            epic_data["fields"]["assignee"] = {"accountId": assignee}
+        
+        if labels:
+            epic_data["fields"]["labels"] = labels
+        
+        if due_date:
+            epic_data["fields"]["duedate"] = due_date
+        
+        result = client.create_issue(epic_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            epic_key = result.get('key')
+            print_success(f"Epic created: {epic_key}")
+            print_json(result)
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def create_epic_interactive(project_key: str, summary: Optional[str] = None, json_output: bool = False):
+    """Interactive epic creation function."""
+    try:
+        if not summary:
+            summary = typer.prompt("Epic summary")
+        
+        description = typer.prompt("Epic description (press Enter to skip)", default="", show_default=False)
+        assignee = typer.prompt("Assignee account ID (press Enter to skip)", default="", show_default=False)
+        due_date = typer.prompt("Due date (YYYY-MM-DD, press Enter to skip)", default="", show_default=False)
+        
+        client = JiraApiClient()
+        
+        epic_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "issuetype": {"name": "Epic"}
+            }
+        }
+        
+        if description.strip():
+            epic_data["fields"]["description"] = text_to_adf(description.strip())
+        
+        if assignee.strip():
+            epic_data["fields"]["assignee"] = {"accountId": assignee.strip()}
+        
+        if due_date.strip():
+            epic_data["fields"]["duedate"] = due_date.strip()
+        
+        result = client.create_issue(epic_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            epic_key = result.get('key')
+            print_success(f"Epic created: {epic_key}")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def edit_epic_interactive(epic_key: str, summary: Optional[str] = None, json_output: bool = False):
+    """Interactive epic editing function."""
+    try:
+        print_info("Epic interactive editing not yet implemented")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def delete_epic_interactive(epic_key: str, json_output: bool = False):
+    """Interactive epic deletion function."""
+    try:
+        print_info("Epic interactive deletion not yet implemented")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def show_issue_tree(issue_key: str, json_output: bool = False, expand_all: bool = False):
+    """Show hierarchical tree view of issue and its descendants."""
+    try:
+        client = JiraApiClient()
+        
+        # Get the root issue
+        root_issue = client.get_issue(issue_key, fields=['summary', 'issuetype', 'status', 'assignee'])
+        root_fields = root_issue['fields']
+        
+        if json_output:
+            # Simple tree structure for JSON output
+            tree_data = {
+                "key": issue_key,
+                "summary": root_fields.get('summary', 'N/A'),
+                "type": root_fields['issuetype']['name'],
+                "status": root_fields.get('status', {}).get('name', 'N/A'),
+                "assignee": root_fields.get('assignee', {}).get('displayName', 'Unassigned') if root_fields.get('assignee') else 'Unassigned',
+                "children": []
+            }
+            print_json(tree_data)
+        else:
+            # Pretty print tree view
+            from rich.tree import Tree
+            
+            issue_type = root_fields['issuetype']['name']
+            status = root_fields.get('status', {}).get('name', 'N/A')
+            assignee = root_fields.get('assignee', {}).get('displayName', 'Unassigned') if root_fields.get('assignee') else 'Unassigned'
+            summary = root_fields.get('summary', 'N/A')
+            
+            # Create root tree
+            tree = Tree(f"[bold blue]{issue_key}[/bold blue] {summary}")
+            tree.add(f"[dim]Type: {issue_type} | Status: {status} | Assignee: {assignee}[/dim]")
+            
+            # Get and display children
+            children_result = client.search_issues(f"parent = {issue_key}", fields=['summary', 'issuetype', 'status', 'assignee'])
+            
+            for child in children_result.get('issues', []):
+                child_fields = child['fields']
+                child_type = child_fields['issuetype']['name']
+                child_status = child_fields.get('status', {}).get('name', 'N/A')
+                child_assignee = child_fields.get('assignee', {}).get('displayName', 'Unassigned') if child_fields.get('assignee') else 'Unassigned'
+                child_summary = child_fields.get('summary', 'N/A')
+                
+                # Add child to tree
+                child_branch = tree.add(f"[green]{child['key']}[/green] {child_summary}")
+                child_branch.add(f"[dim]Type: {child_type} | Status: {child_status} | Assignee: {child_assignee}[/dim]")
+                
+                # Add subtasks if expand_all is True or if this is a story and we want to show subtasks
+                if expand_all or child_type.lower() == 'story':
+                    subtasks_result = client.get_subtasks(child['key'])
+                    for subtask in subtasks_result.get('issues', []):
+                        subtask_fields = subtask['fields']
+                        subtask_status = subtask_fields.get('status', {}).get('name', 'N/A')
+                        subtask_assignee = subtask_fields.get('assignee', {}).get('displayName', 'Unassigned') if subtask_fields.get('assignee') else 'Unassigned'
+                        subtask_summary = subtask_fields.get('summary', 'N/A')
+                        
+                        subtask_branch = child_branch.add(f"[yellow]{subtask['key']}[/yellow] {subtask_summary}")
+                        subtask_branch.add(f"[dim]Type: Sub-task | Status: {subtask_status} | Assignee: {subtask_assignee}[/dim]")
+            
+            console.print(tree)
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def show_issue_hierarchy(issue_key: str, json_output: bool = False):
+    """Show issue in its hierarchy context (parent and children)."""
+    try:
+        client = JiraApiClient()
+        
+        # Get the issue
+        issue = client.get_issue(issue_key, fields=['summary', 'issuetype', 'status', 'assignee', 'parent'])
+        issue_fields = issue['fields']
+        
+        hierarchy_data = {
+            "issue": {
+                "key": issue_key,
+                "summary": issue_fields.get('summary', 'N/A'),
+                "type": issue_fields['issuetype']['name'],
+                "status": issue_fields.get('status', {}).get('name', 'N/A'),
+                "assignee": issue_fields.get('assignee', {}).get('displayName', 'Unassigned') if issue_fields.get('assignee') else 'Unassigned'
+            },
+            "parent": None,
+            "children": []
+        }
+        
+        # Get parent if exists
+        if issue_fields.get('parent'):
+            parent_key = issue_fields['parent']['key']
+            parent_issue = client.get_issue(parent_key, fields=['summary', 'issuetype', 'status', 'assignee'])
+            parent_fields = parent_issue['fields']
+            
+            hierarchy_data["parent"] = {
+                "key": parent_key,
+                "summary": parent_fields.get('summary', 'N/A'),
+                "type": parent_fields['issuetype']['name'],
+                "status": parent_fields.get('status', {}).get('name', 'N/A'),
+                "assignee": parent_fields.get('assignee', {}).get('displayName', 'Unassigned') if parent_fields.get('assignee') else 'Unassigned'
+            }
+        
+        # Get children
+        children_result = client.search_issues(f"parent = {issue_key}", fields=['summary', 'issuetype', 'status', 'assignee'])
+        for child in children_result.get('issues', []):
+            child_fields = child['fields']
+            hierarchy_data["children"].append({
+                "key": child['key'],
+                "summary": child_fields.get('summary', 'N/A'),
+                "type": child_fields['issuetype']['name'],
+                "status": child_fields.get('status', {}).get('name', 'N/A'),
+                "assignee": child_fields.get('assignee', {}).get('displayName', 'Unassigned') if child_fields.get('assignee') else 'Unassigned'
+            })
+        
+        if json_output:
+            print_json(hierarchy_data)
+        else:
+            # Pretty print hierarchy
+            console.print(f"\n[bold]Hierarchy for {issue_key}:[/bold]")
+            
+            # Show parent
+            if hierarchy_data["parent"]:
+                parent = hierarchy_data["parent"]
+                console.print(f"[blue]↑ Parent:[/blue] [green]{parent['key']}[/green] {parent['summary']}")
+                console.print(f"  [dim]Type: {parent['type']} | Status: {parent['status']} | Assignee: {parent['assignee']}[/dim]")
+                console.print()
+            
+            # Show current issue
+            current = hierarchy_data["issue"]
+            console.print(f"[bold blue]→ Current:[/bold blue] [green]{current['key']}[/green] {current['summary']}")
+            console.print(f"  [dim]Type: {current['type']} | Status: {current['status']} | Assignee: {current['assignee']}[/dim]")
+            
+            # Show children
+            if hierarchy_data["children"]:
+                console.print(f"\n[blue]↓ Children ({len(hierarchy_data['children'])}):[/blue]")
+                for child in hierarchy_data["children"]:
+                    console.print(f"  [green]{child['key']}[/green] {child['summary']}")
+                    console.print(f"  [dim]Type: {child['type']} | Status: {child['status']} | Assignee: {child['assignee']}[/dim]")
+            else:
+                console.print("\n[dim]No children[/dim]")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+# Subtask enhancements
+
+def edit_subtask_interactive(subtask_key: str, json_output: bool = False):
+    """Interactive edit function for subtasks."""
+    try:
+        print_info("Interactive subtask editing not yet fully implemented")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def delete_subtask_interactive(subtask_key: str, json_output: bool = False):
+    """Interactive delete function for subtasks."""
+    try:
+        print_info("Interactive subtask deletion not yet fully implemented")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+# Story management functions
+
+def create_story_interactive(epic_key: str, summary: Optional[str] = None, json_output: bool = False):
+    """Interactive story creation function."""
+    try:
+        client = JiraApiClient()
+        
+        # Get epic info to determine project
+        epic = client.get_issue(epic_key, fields=['project'])
+        project_key = epic['fields']['project']['key']
+        
+        if not summary:
+            summary = typer.prompt("Story summary")
+        
+        description = typer.prompt("Story description (press Enter to skip)", default="", show_default=False)
+        assignee = typer.prompt("Assignee account ID (press Enter to skip)", default="", show_default=False)
+        due_date = typer.prompt("Due date (YYYY-MM-DD, press Enter to skip)", default="", show_default=False)
+        
+        story_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "issuetype": {"name": "Story"},
+                "parent": {"key": epic_key}
+            }
+        }
+        
+        if description.strip():
+            story_data["fields"]["description"] = text_to_adf(description.strip())
+        
+        if assignee.strip():
+            story_data["fields"]["assignee"] = {"accountId": assignee.strip()}
+        
+        if due_date.strip():
+            story_data["fields"]["duedate"] = due_date.strip()
+        
+        result = client.create_issue(story_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            story_key = result.get('key')
+            print_success(f"Story created: {story_key} under epic {epic_key}")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)

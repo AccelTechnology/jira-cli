@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jira-cli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Command Line Interface for Jira REST API operations"
 authors = [
     {name = "AccelERP Team", email = "team@accelerp.com"}
