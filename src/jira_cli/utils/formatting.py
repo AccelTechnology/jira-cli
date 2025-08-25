@@ -11,6 +11,29 @@ from rich import print as rprint
 console = Console()
 
 
+def _extract_text_from_adf(adf_content: Dict[str, Any]) -> str:
+    """Extract plain text from Atlassian Document Format (ADF) content."""
+    if not isinstance(adf_content, dict):
+        return str(adf_content)
+    
+    text_parts = []
+    
+    def extract_from_node(node: Dict[str, Any]) -> None:
+        """Recursively extract text from ADF nodes."""
+        if isinstance(node, dict):
+            if node.get('type') == 'text':
+                text_parts.append(node.get('text', ''))
+            elif node.get('content'):
+                for child in node['content']:
+                    extract_from_node(child)
+            elif node.get('attrs', {}).get('text'):
+                # For mention nodes
+                text_parts.append(node['attrs']['text'])
+    
+    extract_from_node(adf_content)
+    return ' '.join(text_parts).strip() or 'No description'
+
+
 def print_json(data: Any, indent: int = 2) -> None:
     """Print data as formatted JSON."""
     json_str = json.dumps(data, indent=indent, default=str, ensure_ascii=False)
@@ -127,7 +150,19 @@ def format_issue_detail(issue: Dict[str, Any]) -> Panel:
     
     key = issue.get('key', 'N/A')
     summary = fields.get('summary', 'N/A')
-    description = fields.get('description', 'No description')[:200] + ('...' if len(fields.get('description', '')) > 200 else '')
+    
+    # Handle description field safely - it might be ADF format or string
+    description_field = fields.get('description', 'No description')
+    if isinstance(description_field, dict):
+        # ADF format - extract text content
+        description = _extract_text_from_adf(description_field)
+    else:
+        # Regular string
+        description = str(description_field) if description_field else 'No description'
+    
+    # Safely truncate description
+    description = description[:200] + ('...' if len(description) > 200 else '')
+    
     status = fields.get('status', {}).get('name', 'N/A')
     assignee = fields.get('assignee', {}).get('displayName', 'Unassigned') if fields.get('assignee') else 'Unassigned'
     reporter = fields.get('reporter', {}).get('displayName', 'N/A') if fields.get('reporter') else 'N/A'
@@ -162,3 +197,23 @@ def format_user_info(user: Dict[str, Any]) -> Panel:
 [bold]Active:[/bold] {'Yes' if active else 'No'}"""
     
     return Panel(content, title="Current User", title_align="left")
+
+
+def format_users_table(users: List[Dict[str, Any]]) -> Table:
+    """Format users as a table."""
+    table = Table(title="Users")
+    
+    table.add_column("Display Name", style="cyan")
+    table.add_column("Email", style="white") 
+    table.add_column("Account ID", style="yellow", no_wrap=True)
+    table.add_column("Active", style="green")
+    
+    for user in users:
+        display_name = user.get('displayName', 'N/A')
+        email = user.get('emailAddress', 'N/A')
+        account_id = user.get('accountId', 'N/A')
+        active = 'Yes' if user.get('active', False) else 'No'
+        
+        table.add_row(display_name, email, account_id, active)
+    
+    return table
