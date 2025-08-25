@@ -17,23 +17,173 @@ A comprehensive command-line interface for Jira REST API operations, built with 
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- Jira Cloud or Server with REST API access
-- Jira API token (for Jira Cloud) or Personal Access Token (for Jira Server/DC)
+- **Python 3.8 or higher** - Download from [python.org](https://www.python.org/downloads/)
+- **Jira Cloud or Server** with REST API access
+- **Jira API token** (for Jira Cloud) or Personal Access Token (for Jira Server/DC)
 
-### Install from Source
+### Quick Install
+
+Choose the installation method that works best for your operating system:
+
+#### 🪟 Windows
+
+```cmd
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+install.bat
+```
+
+#### 🐧 Linux / 🍎 macOS
 
 ```bash
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+chmod +x install.sh
+./install.sh
+```
+
+### Manual Installation Options
+
+#### Option 1: Using pip directly
+
+```bash
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+pip install -e .
+```
+
+#### Option 2: With virtual environment (recommended)
+
+```bash
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+python -m venv jira-cli-venv
+
+# Activate virtual environment
+# On Windows:
+jira-cli-venv\Scripts\activate
+# On Linux/macOS:
+source jira-cli-venv/bin/activate
+
+pip install -e .
+```
+
+#### Option 3: Using requirements.txt
+
+```bash
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Platform-Specific Installation
+
+#### Ubuntu/Debian
+```bash
+# Install Python and required packages
+sudo apt update
+sudo apt install python3 python3-pip python3-venv git
+
+# Clone and install
 git clone https://github.com/AccelTechnology/jira-cli.git
 cd jira-cli
 ./install.sh
 ```
 
-Or install manually:
+#### CentOS/RHEL/Fedora
+```bash
+# Install Python and required packages
+sudo yum install python3 python3-pip git  # CentOS/RHEL
+# OR
+sudo dnf install python3 python3-pip git  # Fedora
+
+# Clone and install
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+./install.sh
+```
+
+#### macOS with Homebrew
+```bash
+# Install Python via Homebrew
+brew install python3
+
+# Clone and install
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+./install.sh
+```
+
+#### Windows with Package Manager
+```powershell
+# Using Chocolatey
+choco install python3 git
+
+# Using Scoop
+scoop install python git
+
+# Then run the installation
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+.\install.bat
+```
+
+### Development Installation
+
+For contributors and developers:
 
 ```bash
-pip install -e .
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+chmod +x install-dev.sh
+./install-dev.sh
 ```
+
+This installs additional development tools: `black`, `isort`, `flake8`, `pytest`, `mypy`
+
+### Verify Installation
+
+After installation, verify it works:
+
+```bash
+jira-cli --help
+jira-cli version
+```
+
+### Installation Troubleshooting
+
+#### Common Issues
+
+**Python not found:**
+- Windows: Make sure to check "Add Python to PATH" during Python installation
+- Linux: Install Python 3 using your package manager
+- macOS: Use Homebrew or download from python.org
+
+**Permission denied on install.sh:**
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+**pip not found:**
+- Install pip: `python -m ensurepip --upgrade`
+- Or reinstall Python with pip included
+
+**Virtual environment issues:**
+- Make sure `python -m venv` works
+- Try using `virtualenv` instead: `pip install virtualenv && virtualenv jira-cli-venv`
+
+**Installation fails with dependencies:**
+- Update pip: `pip install --upgrade pip`
+- Install dependencies manually: `pip install -r requirements.txt`
+
+#### System-specific Notes
+
+- **Windows**: Use Command Prompt or PowerShell, not Git Bash for .bat files
+- **WSL (Windows Subsystem for Linux)**: Use the Linux installation method
+- **macOS**: If you have multiple Python versions, specify the version: `python3.11 -m pip install -e .`
+- **Docker**: You can run jira-cli in a container - see Development section
 
 ## Configuration
 
