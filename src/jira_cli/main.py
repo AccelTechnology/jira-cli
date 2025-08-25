@@ -98,6 +98,17 @@ def my_issues(
     search_issues(jql, None, 50, 0, json_output, table)
 
 
+@app.command("subtasks")
+def list_subtasks_quick(
+    parent_key: str = typer.Argument(..., help="Parent issue key (e.g., PROJ-123)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    table: bool = typer.Option(False, "--table", help="Output as table")
+):
+    """Quick command to list subtasks of a parent issue."""
+    from .commands.issues import list_subtasks
+    list_subtasks(parent_key, json_output, table)
+
+
 def main():
     """Main entry point."""
     app()

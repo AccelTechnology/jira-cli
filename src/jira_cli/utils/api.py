@@ -232,3 +232,49 @@ class JiraApiClient:
     def get_current_user(self) -> Dict[str, Any]:
         """Get current user info."""
         return self.get('myself')
+    
+    def get_subtasks(self, parent_issue_key: str) -> Dict[str, Any]:
+        """Get subtasks of a parent issue.
+        
+        Args:
+            parent_issue_key: Parent issue key
+            
+        Returns:
+            Search results containing subtasks
+        """
+        jql = f'parent = {parent_issue_key}'
+        return self.search_issues(jql)
+    
+    def create_subtask(self, parent_issue_key: str, subtask_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a subtask under a parent issue.
+        
+        Args:
+            parent_issue_key: Parent issue key
+            subtask_data: Subtask creation data
+            
+        Returns:
+            Created subtask data
+        """
+        # Add parent reference to the subtask data
+        subtask_data['fields']['parent'] = {'key': parent_issue_key}
+        # Set issue type to Sub-task
+        subtask_data['fields']['issuetype'] = {'name': 'Sub-task'}
+        
+        return self.create_issue(subtask_data)
+    
+    def link_subtask_to_parent(self, subtask_key: str, parent_key: str) -> Dict[str, Any]:
+        """Link an existing issue as a subtask to a parent.
+        
+        Args:
+            subtask_key: Subtask issue key
+            parent_key: Parent issue key
+            
+        Returns:
+            Empty response
+        """
+        update_data = {
+            'fields': {
+                'parent': {'key': parent_key}
+            }
+        }
+        return self.update_issue(subtask_key, update_data)

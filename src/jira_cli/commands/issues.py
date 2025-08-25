@@ -346,3 +346,138 @@ def delete_issue(
     except JiraCliError as e:
         print_error(str(e))
         raise typer.Exit(1)
+
+
+@app.command("subtasks")
+def list_subtasks(
+    parent_key: str = typer.Argument(..., help="Parent issue key (e.g., PROJ-123)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    table: bool = typer.Option(False, "--table", help="Output as table")
+):
+    """List subtasks of a parent issue."""
+    try:
+        client = JiraApiClient()
+        result = client.get_subtasks(parent_key)
+        
+        if json_output:
+            print_json(result)
+        elif table:
+            subtasks = result.get('issues', [])
+            if subtasks:
+                subtasks_table = format_issue_table(subtasks)
+                console.print(subtasks_table)
+            else:
+                print_info(f"No subtasks found for {parent_key}")
+        else:
+            subtasks = result.get('issues', [])
+            if subtasks:
+                print_json(result)
+            else:
+                print_info(f"No subtasks found for {parent_key}")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+@app.command("create-subtask")
+def create_subtask(
+    parent_key: str = typer.Option(..., "--parent", "-p", help="Parent issue key"),
+    summary: str = typer.Option(..., "--summary", "-s", help="Subtask summary"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Subtask description"),
+    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee account ID"),
+    priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
+    labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
+    due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Create a subtask under a parent issue."""
+    try:
+        client = JiraApiClient()
+        
+        # Get parent issue to extract project information
+        parent_issue = client.get_issue(parent_key, fields=['project'])
+        project_key = parent_issue['fields']['project']['key']
+        
+        subtask_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary
+            }
+        }
+        
+        if description:
+            subtask_data["fields"]["description"] = text_to_adf(description)
+        
+        if assignee:
+            subtask_data["fields"]["assignee"] = {"accountId": assignee}
+        
+        if priority:
+            subtask_data["fields"]["priority"] = {"name": priority}
+        
+        if labels:
+            subtask_data["fields"]["labels"] = labels
+        
+        if due_date:
+            subtask_data["fields"]["duedate"] = due_date
+        
+        result = client.create_subtask(parent_key, subtask_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            subtask_key = result.get('key')
+            print_success(f"Subtask created: {subtask_key} under parent {parent_key}")
+            print_json(result)
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+@app.command("link-subtask")
+def link_subtask(
+    subtask_key: str = typer.Argument(..., help="Subtask issue key (e.g., PROJ-456)"),
+    parent_key: str = typer.Argument(..., help="Parent issue key (e.g., PROJ-123)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Link an existing issue as a subtask to a parent issue."""
+    try:
+        client = JiraApiClient()
+        client.link_subtask_to_parent(subtask_key, parent_key)
+        
+        if json_output:
+            print_json({"message": f"Issue {subtask_key} linked as subtask to {parent_key}"})
+        else:
+            print_success(f"Issue {subtask_key} linked as subtask to {parent_key}")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+@app.command("unlink-subtask")
+def unlink_subtask(
+    subtask_key: str = typer.Argument(..., help="Subtask issue key (e.g., PROJ-456)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Unlink a subtask from its parent issue."""
+    try:
+        client = JiraApiClient()
+        
+        # Remove parent link by setting it to None
+        update_data = {
+            "fields": {
+                "parent": None
+            }
+        }
+        client.update_issue(subtask_key, update_data)
+        
+        if json_output:
+            print_json({"message": f"Subtask {subtask_key} unlinked from parent"})
+        else:
+            print_success(f"Subtask {subtask_key} unlinked from parent")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)

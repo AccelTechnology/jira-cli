@@ -6,11 +6,12 @@ A comprehensive command-line interface for Jira REST API operations, built with 
 
 - **🔍 Issue Management**: Search, create, read, update, delete, assign, and transition issues
 - **📋 Epic Management**: Create epics, link stories to epics, list epic contents
+- **🔧 Subtask Management**: Create, list, link, and unlink subtasks for better task breakdown
 - **📅 Timeline Management**: Set due dates, track project timelines, timeline-based filtering
 - **🏗️ Project Operations**: List projects, get project details, manage versions, components, and issue types
 - **🔐 Authentication**: Secure API token authentication with connection testing
 - **📊 Rich Output**: Enhanced tables, detailed views, JSON output, and beautiful formatting
-- **⚡ Quick Commands**: Shortcuts for common operations (my-issues, epics, search)
+- **⚡ Quick Commands**: Shortcuts for common operations (my-issues, epics, subtasks, search)
 - **🎨 Multiple Output Formats**: JSON, table, and detailed panel views
 
 ## Installation
@@ -330,6 +331,40 @@ jira-cli issues create \
   --epic <project_id>-1
 ```
 
+### Subtask Management
+
+```bash
+# List subtasks of a parent issue (quick command)
+jira-cli subtasks <project_id>-123 --table
+
+# List subtasks (detailed command)
+jira-cli issues subtasks <project_id>-123 --table
+
+# Create subtask under a parent issue
+jira-cli issues create-subtask \
+  --parent <project_id>-123 \
+  --summary "Implement user validation" \
+  --description "Add validation logic for user input" \
+  --assignee "user_account_id" \
+  --due-date "2025-12-31"
+
+# Link existing issue as subtask to parent
+jira-cli issues link-subtask <project_id>-456 <project_id>-123
+
+# Unlink subtask from parent
+jira-cli issues unlink-subtask <project_id>-456
+
+# Create subtask with all options
+jira-cli issues create-subtask \
+  --parent <project_id>-123 \
+  --summary "Database schema update" \
+  --description "Update user table schema" \
+  --assignee "user_account_id" \
+  --priority "High" \
+  --label "backend" --label "database" \
+  --due-date "2025-11-15"
+```
+
 ### Timeline Management
 
 ```bash
@@ -367,6 +402,9 @@ jira-cli my-issues --project <project_id> --status "open" --table
 
 # List all epics
 jira-cli epics --project <project_id> --table
+
+# List subtasks of an issue
+jira-cli subtasks <project_id>-123 --table
 
 # Quick search
 jira-cli search "assignee = currentUser()" --table
@@ -436,8 +474,17 @@ jira-cli search "project = <project_id> AND parent = <project_id>-1" --table
 # Stories without epic assignment
 jira-cli search "project = <project_id> AND issuetype = Story AND parent is EMPTY" --table
 
+# All subtasks in project
+jira-cli search "project = <project_id> AND issuetype = Sub-task" --table
+
+# Subtasks under specific parent
+jira-cli search "project = <project_id> AND parent = <project_id>-123" --table
+
+# Issues without subtasks
+jira-cli search "project = <project_id> AND issueFunction in subtasksOf('none')" --table
+
 # Issues by type with enhanced table view
-jira-cli search "project = <project_id> AND issuetype in (Epic, Story, Task)" --table
+jira-cli search "project = <project_id> AND issuetype in (Epic, Story, Task, Sub-task)" --table
 
 # Complex timeline queries
 jira-cli search "project = <project_id> AND duedate <= '2025-12-31' ORDER BY priority DESC, duedate ASC" --table
@@ -515,6 +562,24 @@ jira-cli issues create --project <project_id> --summary "User Registration" --ty
 jira-cli issues epic-stories <project_id>-1 --table
 ```
 
+### Subtask Management
+```bash
+# Create story with subtasks for detailed breakdown
+jira-cli issues create --project <project_id> --summary "User Authentication System" --type Story
+
+# Break down the story into subtasks
+jira-cli issues create-subtask --parent <project_id>-5 --summary "Design database schema" --assignee "user1_id"
+jira-cli issues create-subtask --parent <project_id>-5 --summary "Implement login API" --assignee "user2_id" 
+jira-cli issues create-subtask --parent <project_id>-5 --summary "Add frontend validation" --assignee "user3_id"
+jira-cli issues create-subtask --parent <project_id>-5 --summary "Write unit tests" --assignee "user4_id"
+
+# Review subtask progress
+jira-cli subtasks <project_id>-5 --table
+
+# Convert existing issue to subtask
+jira-cli issues link-subtask <project_id>-10 <project_id>-5
+```
+
 ### Project Planning
 ```bash
 # List all epics for planning
@@ -536,6 +601,9 @@ jira-cli --help
 # Command-specific help
 jira-cli issues --help
 jira-cli issues create --help
+jira-cli issues create-subtask --help
+jira-cli issues subtasks --help
+jira-cli subtasks --help
 jira-cli projects --help
 jira-cli auth --help
 jira-cli search --help
