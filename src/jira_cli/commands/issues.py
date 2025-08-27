@@ -10,6 +10,8 @@ from ..utils.formatting import (
     print_json, print_error, print_success, print_info,
     format_issue_table, format_issue_detail
 )
+from ..utils.error_handling import ErrorFormatter, handle_api_error
+from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
 
 console = Console()
@@ -35,7 +37,41 @@ def text_to_adf(text: str) -> dict:
     }
 
 
+def read_description_from_source(description: Optional[str], file_path: Optional[str]) -> Optional[str]:
+    """Read description from direct input or file.
+    
+    Args:
+        description: Direct description text
+        file_path: Path to file containing description
+        
+    Returns:
+        Description text or None if neither provided
+        
+    Raises:
+        JiraCliError: If file not found or cannot be read
+    """
+    if description and file_path:
+        raise JiraCliError("Cannot specify both --description and --description-file")
+    
+    if file_path:
+        try:
+            import os
+            if not os.path.exists(file_path):
+                raise JiraCliError(f"Description file not found: {file_path}")
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    print_info(f"Warning: Description file {file_path} is empty")
+                return content
+        except Exception as e:
+            raise JiraCliError(f"Failed to read description file {file_path}: {str(e)}")
+    
+    return description
+
+
 @app.command("search")
+@validate_command(jql_params=['jql'], command_context='issues search')
 def search_issues(
     jql: str = typer.Argument(..., help="JQL query string"),
     fields: Optional[List[str]] = typer.Option(None, "--field", "-f", help="Fields to include in response"),
@@ -58,11 +94,12 @@ def search_issues(
             print_json(result)
             
     except JiraCliError as e:
-        print_error(str(e))
+        handle_api_error(e, 'issues search')
         raise typer.Exit(1)
 
 
 @app.command("get")
+@validate_command(issue_key_params=['issue_key'], command_context='issues get')
 def get_issue(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
     fields: Optional[List[str]] = typer.Option(None, "--field", "-f", help="Fields to include in response"),
@@ -88,11 +125,19 @@ def get_issue(
 
 
 @app.command("create")
+@validate_command(
+    project_key_params=['project_key'], 
+    issue_key_params=['epic'], 
+    date_params=['due_date'],
+    required_params=['project_key', 'summary'], 
+    command_context='issues create'
+)
 def create_issue(
     project_key: str = typer.Option(..., "--project", "-p", help="Project key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Issue summary"),
     issue_type: str = typer.Option("Task", "--type", "-t", help="Issue type"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Issue description"),
+    description_file: Optional[str] = typer.Option(None, "--description-file", "-f", help="Read description from file"),
     assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee account ID"),
     priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
     labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
@@ -104,6 +149,9 @@ def create_issue(
     try:
         client = JiraApiClient()
         
+        # Read description from source
+        final_description = read_description_from_source(description, description_file)
+        
         issue_data = {
             "fields": {
                 "project": {"key": project_key},
@@ -112,8 +160,8 @@ def create_issue(
             }
         }
         
-        if description:
-            issue_data["fields"]["description"] = text_to_adf(description)
+        if final_description:
+            issue_data["fields"]["description"] = text_to_adf(final_description)
         
         if assignee:
             issue_data["fields"]["assignee"] = {"accountId": assignee}
@@ -185,7 +233,27 @@ def update_issue(
             fields["duedate"] = due_date
         
         if not fields:
-            print_error("No fields to update specified")
+            ErrorFormatter.print_formatted_error(
+                "No Fields to Update",
+                "At least one field must be specified to update the issue.",
+                expected="One or more update parameters",
+                examples=[
+                    f"jira-cli issues update {issue_key} --summary 'New summary'",
+                    f"jira-cli issues update {issue_key} --description 'New description'",
+                    f"jira-cli issues update {issue_key} --assignee user@company.com",
+                    f"jira-cli issues update {issue_key} --priority High --due-date 2025-12-31"
+                ],
+                suggestions=[
+                    "Use --summary to update the issue summary",
+                    "Use --description to update the issue description", 
+                    "Use --assignee to change the assignee",
+                    "Use --priority to change the priority",
+                    "Use --due-date to set or change the due date",
+                    "Use --labels to set issue labels",
+                    "Multiple fields can be updated in one command"
+                ],
+                command_context="issues update"
+            )
             raise typer.Exit(1)
         
         update_data = {"fields": fields}
@@ -385,7 +453,8 @@ def create_subtask(
     parent_key: str = typer.Option(..., "--parent", "-p", help="Parent issue key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Subtask summary"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Subtask description"),
-    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee account ID"),
+    description_file: Optional[str] = typer.Option(None, "--description-file", "-f", help="Read description from file"),
+    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee email or account ID"),
     priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
     labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
     due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
@@ -395,9 +464,24 @@ def create_subtask(
     try:
         client = JiraApiClient()
         
+        # Read description from source
+        final_description = read_description_from_source(description, description_file)
+        
         # Get parent issue to extract project information
         parent_issue = client.get_issue(parent_key, fields=['project'])
         project_key = parent_issue['fields']['project']['key']
+        
+        # Resolve assignee if email provided
+        account_id = None
+        if assignee:
+            if '@' in assignee:  # Email format
+                users = client.search_users(assignee, max_results=1)
+                if not users:
+                    print_error(f"User with email '{assignee}' not found")
+                    raise typer.Exit(1)
+                account_id = users[0]['accountId']
+            else:  # Assume account ID
+                account_id = assignee
         
         subtask_data = {
             "fields": {
@@ -406,11 +490,11 @@ def create_subtask(
             }
         }
         
-        if description:
-            subtask_data["fields"]["description"] = text_to_adf(description)
+        if final_description:
+            subtask_data["fields"]["description"] = text_to_adf(final_description)
         
-        if assignee:
-            subtask_data["fields"]["assignee"] = {"accountId": assignee}
+        if account_id:
+            subtask_data["fields"]["assignee"] = {"accountId": account_id}
         
         if priority:
             subtask_data["fields"]["priority"] = {"name": priority}
@@ -428,7 +512,8 @@ def create_subtask(
         else:
             subtask_key = result.get('key')
             print_success(f"Subtask created: {subtask_key} under parent {parent_key}")
-            print_json(result)
+            if final_description:
+                print_info(f"Description: {final_description[:100]}{'...' if len(final_description) > 100 else ''}")
             
     except JiraCliError as e:
         print_error(str(e))
@@ -528,6 +613,79 @@ def create_epic(
             epic_key = result.get('key')
             print_success(f"Epic created: {epic_key}")
             print_json(result)
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+@app.command("create-epic")
+def create_epic_command(
+    project_key: str = typer.Option(..., "--project", "-p", help="Project key"),
+    summary: str = typer.Option(..., "--summary", "-s", help="Epic summary"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Epic description"),
+    description_file: Optional[str] = typer.Option(None, "--description-file", "-f", help="Read description from file"),
+    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee email or account ID"),
+    due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
+    priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
+    labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Use interactive mode"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Create a new epic."""
+    if interactive:
+        return create_epic_interactive(project_key, summary, json_output)
+    
+    try:
+        client = JiraApiClient()
+        
+        # Read description from source
+        final_description = read_description_from_source(description, description_file)
+        
+        # Resolve assignee if email provided
+        account_id = None
+        if assignee:
+            if '@' in assignee:  # Email format
+                users = client.search_users(assignee, max_results=1)
+                if not users:
+                    print_error(f"User with email '{assignee}' not found")
+                    raise typer.Exit(1)
+                account_id = users[0]['accountId']
+            else:  # Assume account ID
+                account_id = assignee
+        
+        epic_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "issuetype": {"name": "Epic"}
+            }
+        }
+        
+        if final_description:
+            epic_data["fields"]["description"] = text_to_adf(final_description)
+        
+        if account_id:
+            epic_data["fields"]["assignee"] = {"accountId": account_id}
+        
+        if due_date:
+            epic_data["fields"]["duedate"] = due_date
+        
+        if priority:
+            epic_data["fields"]["priority"] = {"name": priority}
+        
+        if labels:
+            epic_data["fields"]["labels"] = labels
+        
+        result = client.create_issue(epic_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            epic_key = result.get('key')
+            print_success(f"Epic created: {epic_key}")
+            if final_description:
+                print_info(f"Description: {final_description[:100]}{'...' if len(final_description) > 100 else ''}")
             
     except JiraCliError as e:
         print_error(str(e))
@@ -764,6 +922,179 @@ def delete_subtask_interactive(subtask_key: str, json_output: bool = False):
 
 
 # Story management functions
+
+@app.command("watchers")
+def list_watchers(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """List watchers for an issue."""
+    try:
+        client = JiraApiClient()
+        watchers = client.get_watchers(issue_key)
+        
+        if json_output:
+            print_json(watchers)
+        else:
+            console.print(f"[bold blue]Watchers for {issue_key}:[/bold blue]")
+            
+            if watchers.get('watchers'):
+                for watcher in watchers['watchers']:
+                    display_name = watcher.get('displayName', 'Unknown')
+                    account_id = watcher.get('accountId', '')
+                    email = watcher.get('emailAddress', '')
+                    console.print(f"  • {display_name} ({email}) - {account_id}")
+            else:
+                console.print("  No watchers found")
+                
+            console.print(f"\nTotal watchers: {watchers.get('watchCount', 0)}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to get watchers: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("watch")  
+def add_watcher(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    user_email: Optional[str] = typer.Option(None, "--user", "-u", help="User email to add as watcher (defaults to current user)")
+):
+    """Add a watcher to an issue."""
+    try:
+        client = JiraApiClient()
+        
+        account_id = None
+        if user_email:
+            users = client.search_users(user_email, max_results=1)
+            if not users:
+                print_error(f"User with email '{user_email}' not found")
+                raise typer.Exit(1)
+            account_id = users[0]['accountId']
+        
+        client.add_watcher(issue_key, account_id)
+        
+        if user_email:
+            print_success(f"Added {user_email} as watcher to {issue_key}")
+        else:
+            print_success(f"You are now watching {issue_key}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to add watcher: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("unwatch")
+def remove_watcher(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    user_email: Optional[str] = typer.Option(None, "--user", "-u", help="User email to remove as watcher (defaults to current user)")
+):
+    """Remove a watcher from an issue."""
+    try:
+        client = JiraApiClient()
+        
+        account_id = None
+        if user_email:
+            users = client.search_users(user_email, max_results=1)
+            if not users:
+                print_error(f"User with email '{user_email}' not found")
+                raise typer.Exit(1)
+            account_id = users[0]['accountId']
+        
+        client.remove_watcher(issue_key, account_id)
+        
+        if user_email:
+            print_success(f"Removed {user_email} from watching {issue_key}")
+        else:
+            print_success(f"You are no longer watching {issue_key}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to remove watcher: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("create-story")
+def create_story_command(
+    epic_key: str = typer.Option(..., "--epic", "-e", help="Epic key to create story under"),
+    summary: str = typer.Option(..., "--summary", "-s", help="Story summary"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Story description"),
+    description_file: Optional[str] = typer.Option(None, "--description-file", "-f", help="Read description from file"),
+    assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Assignee email or account ID"),
+    due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
+    priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
+    labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
+    story_points: Optional[int] = typer.Option(None, "--story-points", help="Story points estimation"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Use interactive mode"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Create a new story under an epic."""
+    if interactive:
+        return create_story_interactive(epic_key, summary, json_output)
+    
+    try:
+        client = JiraApiClient()
+        
+        # Read description from source
+        final_description = read_description_from_source(description, description_file)
+        
+        # Get epic info to determine project
+        epic = client.get_issue(epic_key, fields=['project'])
+        project_key = epic['fields']['project']['key']
+        
+        # Resolve assignee if email provided
+        account_id = None
+        if assignee:
+            if '@' in assignee:  # Email format
+                users = client.search_users(assignee, max_results=1)
+                if not users:
+                    print_error(f"User with email '{assignee}' not found")
+                    raise typer.Exit(1)
+                account_id = users[0]['accountId']
+            else:  # Assume account ID
+                account_id = assignee
+        
+        story_data = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "issuetype": {"name": "Story"},
+                "parent": {"key": epic_key}
+            }
+        }
+        
+        if final_description:
+            story_data["fields"]["description"] = text_to_adf(final_description)
+        
+        if account_id:
+            story_data["fields"]["assignee"] = {"accountId": account_id}
+        
+        if due_date:
+            story_data["fields"]["duedate"] = due_date
+        
+        if priority:
+            story_data["fields"]["priority"] = {"name": priority}
+        
+        if labels:
+            story_data["fields"]["labels"] = labels
+        
+        if story_points:
+            # Note: The field name for story points varies by Jira setup
+            # Common field names: "customfield_10002", "customfield_10016", etc.
+            story_data["fields"]["customfield_10002"] = story_points  # Default Jira Cloud story points field
+        
+        result = client.create_issue(story_data)
+        
+        if json_output:
+            print_json(result)
+        else:
+            story_key = result.get('key')
+            print_success(f"Story created: {story_key} under epic {epic_key}")
+            if final_description:
+                print_info(f"Description: {final_description[:100]}{'...' if len(final_description) > 100 else ''}")
+            
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
 
 def create_story_interactive(epic_key: str, summary: Optional[str] = None, json_output: bool = False):
     """Interactive story creation function."""

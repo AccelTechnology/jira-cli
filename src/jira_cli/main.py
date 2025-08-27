@@ -5,8 +5,11 @@ from typing import Optional
 from rich.console import Console
 from rich import print as rprint
 
-from .commands import issues, projects, auth
+from .commands import issues, projects, auth, worklog, attachments
 from .utils.formatting import print_success, print_error, print_info
+from .utils.error_handling import ErrorFormatter, validate_configuration, print_configuration_help, handle_api_error
+from .utils.validation import validate_command
+from .exceptions import JiraCliError, ValidationError
 
 console = Console()
 
@@ -22,6 +25,8 @@ app = typer.Typer(
 app.add_typer(issues.app, name="issues", help="Manage Jira issues")
 app.add_typer(projects.app, name="projects", help="Manage Jira projects")
 app.add_typer(auth.app, name="auth", help="Authentication and user info")
+app.add_typer(worklog.app, name="worklog", help="Manage worklogs and time tracking")
+app.add_typer(attachments.app, name="attachments", help="Manage issue attachments")
 
 
 @app.command("version")
@@ -56,12 +61,21 @@ def version():
 
 
 @app.command("config")
-def show_config():
+def show_config(
+    setup_help: bool = typer.Option(False, "--setup-help", "-s", help="Show configuration setup instructions")
+):
     """Show current configuration."""
     import os
     
+    if setup_help:
+        print_configuration_help()
+        return
+    
+    # Validate configuration
+    is_valid, issues = validate_configuration()
+    
     config_info = {
-        "JIRA_URL": os.getenv('JIRA_URL', 'https://acceldevs.atlassian.net'),
+        "JIRA_URL": os.getenv('JIRA_URL', 'Not set'),
         "JIRA_EMAIL": os.getenv('JIRA_EMAIL', 'Not set'),
         "JIRA_API_TOKEN": "Set" if os.getenv('JIRA_API_TOKEN') else "Not set"
     }
@@ -72,6 +86,15 @@ def show_config():
             console.print(f"  {key}: {value}")
         else:
             console.print(f"  {key}: {value}")
+    
+    # Show validation status
+    if is_valid:
+        print_success("Configuration is valid")
+    else:
+        print_error("Configuration issues found:")
+        for issue in issues:
+            console.print(f"  • {issue}")
+        console.print("\n[dim]Run 'jira-cli config --setup-help' for setup instructions[/dim]")
 
 
 @app.command("search")
@@ -140,6 +163,95 @@ def my_issues(
     search_issues(jql, None, 50, 0, json_output, table)
 
 
+@app.command("bulk-watch")
+def bulk_watch(
+    issue_keys: str = typer.Argument(..., help="Comma-separated list of issue keys (e.g., 'PROJ-1,PROJ-2,PROJ-3')"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Watch multiple issues at once."""
+    from .utils.api import JiraApiClient
+    from .exceptions import JiraCliError
+    
+    try:
+        client = JiraApiClient()
+        keys_list = [key.strip() for key in issue_keys.split(',')]
+        
+        result = client.bulk_watch_issues(keys_list)
+        
+        if json_output:
+            print_json(result)
+        else:
+            print_success(f"Started watching {len(keys_list)} issues: {', '.join(keys_list)}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to bulk watch issues: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("bulk-unwatch")
+def bulk_unwatch(
+    issue_keys: str = typer.Argument(..., help="Comma-separated list of issue keys (e.g., 'PROJ-1,PROJ-2,PROJ-3')"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Stop watching multiple issues at once."""
+    from .utils.api import JiraApiClient
+    from .exceptions import JiraCliError
+    
+    try:
+        client = JiraApiClient()
+        keys_list = [key.strip() for key in issue_keys.split(',')]
+        
+        result = client.bulk_unwatch_issues(keys_list)
+        
+        if json_output:
+            print_json(result)
+        else:
+            print_success(f"Stopped watching {len(keys_list)} issues: {', '.join(keys_list)}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to bulk unwatch issues: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("bulk-assign")
+def bulk_assign(
+    issue_keys: str = typer.Argument(..., help="Comma-separated list of issue keys (e.g., 'PROJ-1,PROJ-2,PROJ-3')"),
+    assignee: str = typer.Option(..., "--assignee", "-a", help="User email to assign issues to"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
+):
+    """Assign multiple issues to a user at once."""
+    from .utils.api import JiraApiClient
+    from .exceptions import JiraCliError
+    
+    try:
+        client = JiraApiClient()
+        keys_list = [key.strip() for key in issue_keys.split(',')]
+        
+        # Find user account ID
+        users = client.search_users(assignee, max_results=1)
+        if not users:
+            print_error(f"User with email '{assignee}' not found")
+            raise typer.Exit(1)
+        
+        account_id = users[0]['accountId']
+        
+        # Prepare bulk edit fields
+        fields = {
+            'assignee': {'accountId': account_id}
+        }
+        
+        result = client.bulk_edit_issues(keys_list, fields)
+        
+        if json_output:
+            print_json(result)
+        else:
+            print_success(f"Assigned {len(keys_list)} issues to {assignee}: {', '.join(keys_list)}")
+                
+    except JiraCliError as e:
+        print_error(f"Failed to bulk assign issues: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("subtasks")
 def list_subtasks_quick(
     parent_key: str = typer.Argument(..., help="Parent issue key (e.g., PROJ-123)"),
@@ -199,9 +311,7 @@ def stories_main(
     
     if action == "create":
         create_story_interactive(epic_key, summary, json_output)
-    elif action and action != "create":
-        print_error(f"Invalid action '{action}'. Valid actions: create")
-        raise typer.Exit(1)
+    # Note: choice validation is handled by decorator now
     else:
         # List stories under epic (default behavior)
         jql = f"parent = {epic_key}"
