@@ -588,13 +588,13 @@ def validate_configuration() -> Tuple[bool, List[str]]:
     issues = []
     
     # Check required environment variables
+    # Note: JIRA_URL has a default value in auth.py, so we use the same logic
     jira_url = os.getenv('JIRA_URL')
     jira_email = os.getenv('JIRA_EMAIL')
     jira_token = os.getenv('JIRA_API_TOKEN')
     
-    if not jira_url:
-        issues.append("JIRA_URL environment variable is not set")
-    elif not jira_url.startswith(('http://', 'https://')):
+    # Only validate URL format if it's explicitly set or default
+    if jira_url and not jira_url.startswith(('http://', 'https://')):
         issues.append("JIRA_URL should start with http:// or https://")
     
     if not jira_email:

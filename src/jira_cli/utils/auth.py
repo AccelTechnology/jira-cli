@@ -14,9 +14,15 @@ def get_jira_credentials() -> Tuple[str, str, str]:
     Raises:
         ConfigurationError: If required environment variables are not set
     """
-    base_url = os.getenv('JIRA_URL', 'https://acceldevs.atlassian.net')
+    base_url = os.getenv('JIRA_URL')
     email = os.getenv('JIRA_EMAIL')
     api_token = os.getenv('JIRA_API_TOKEN')
+    
+    if not base_url:
+        raise ConfigurationError(
+            "JIRA_URL environment variable is required. "
+            "Set it with: export JIRA_URL='https://your-domain.atlassian.net'"
+        )
     
     if not email:
         raise ConfigurationError(
