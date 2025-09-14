@@ -1,2 +1,3 @@
 [console_scripts]
+jira = jira_cli.main:app
 jira-cli = jira_cli.main:app

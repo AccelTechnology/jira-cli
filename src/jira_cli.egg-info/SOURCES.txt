@@ -12,11 +12,15 @@ src/jira_cli.egg-info/entry_points.txt
 src/jira_cli.egg-info/requires.txt
 src/jira_cli.egg-info/top_level.txt
 src/jira_cli/commands/__init__.py
+src/jira_cli/commands/attachments.py
 src/jira_cli/commands/auth.py
 src/jira_cli/commands/issues.py
 src/jira_cli/commands/projects.py
+src/jira_cli/commands/worklog.py
 src/jira_cli/utils/__init__.py
 src/jira_cli/utils/api.py
 src/jira_cli/utils/auth.py
+src/jira_cli/utils/error_handling.py
 src/jira_cli/utils/formatting.py
 src/jira_cli/utils/markdown_to_adf.py
+src/jira_cli/utils/validation.py

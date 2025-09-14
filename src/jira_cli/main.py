@@ -135,7 +135,9 @@ def epics_main(
     else:
         # List epics (default behavior)
         jql = f"project = {project} AND issuetype = Epic"
-        search_issues(jql, None, 50, 0, json_output, table)
+        # Request specific fields for proper table display
+        fields = ["key", "summary", "issuetype", "status", "assignee", "priority", "duedate"]
+        search_issues(jql, fields, 50, 0, json_output, table)
 
 
 @app.command("my-issues")
@@ -160,7 +162,9 @@ def my_issues(
             jql_parts.append(f"status = \"{status}\"")
     
     jql = " AND ".join(jql_parts)
-    search_issues(jql, None, 50, 0, json_output, table)
+    # Request specific fields for proper table display
+    fields = ["key", "summary", "issuetype", "status", "assignee", "priority", "duedate"]
+    search_issues(jql, fields, 50, 0, json_output, table)
 
 
 @app.command("bulk-watch")

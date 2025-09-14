@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 jira-cli = "jira_cli.main:app"
+jira = "jira_cli.main:app"
 
 [project.urls]
 Homepage = "https://github.com/accelerp/jira-cli"
