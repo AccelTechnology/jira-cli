@@ -127,7 +127,7 @@ def get_issue(
 @app.command("create")
 @validate_command(
     project_key_params=['project_key'], 
-    issue_key_params=['epic'], 
+    issue_key_params=['epic', 'parent'], 
     date_params=['due_date'],
     required_params=['project_key', 'summary'], 
     command_context='issues create'
@@ -142,6 +142,7 @@ def create_issue(
     priority: Optional[str] = typer.Option(None, "--priority", help="Priority name"),
     labels: Optional[List[str]] = typer.Option(None, "--label", "-l", help="Labels to add"),
     epic: Optional[str] = typer.Option(None, "--epic", "-e", help="Epic issue key to link this story to"),
+    parent: Optional[str] = typer.Option(None, "--parent", help="Parent issue key (required for subtasks)"),
     due_date: Optional[str] = typer.Option(None, "--due-date", help="Due date in YYYY-MM-DD format"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON")
 ):
@@ -149,14 +150,67 @@ def create_issue(
     try:
         client = JiraApiClient()
         
+        # Validate subtask requirements
+        if issue_type.lower() in ['subtask', 'sub-task']:
+            if not parent:
+                from ..utils.error_handling import ErrorFormatter
+                ErrorFormatter.print_formatted_error(
+                    "Missing Required Parameter",
+                    "Subtasks require a parent issue to be specified.",
+                    expected="Parent issue key using --parent parameter",
+                    examples=[
+                        f"jira-cli issues create --project {project_key} --type Subtask --summary '{summary}' --parent PROJ-123",
+                        f"jira-cli issues create --project {project_key} --type Subtask --summary '{summary}' --parent {project_key}-1"
+                    ],
+                    suggestions=[
+                        "Use --parent to specify the parent issue key",
+                        "Ensure the parent issue exists and you have permission to create subtasks under it",
+                        "Use 'jira-cli issues search' to find suitable parent issues"
+                    ],
+                    command_context="issues create"
+                )
+                raise typer.Exit(1)
+
+        # Validate issue type against project configuration
+        from ..utils.validation import validate_project_issue_type
+        try:
+            validated_issue_type = validate_project_issue_type(project_key, issue_type, "issues create")
+            if validated_issue_type != issue_type:
+                print_info(f"Using project-specific issue type: {validated_issue_type}")
+                issue_type = validated_issue_type
+        except Exception as e:
+            # If validation fails, the error is already displayed
+            # Just exit without additional error messages
+            if "Invalid issue type" in str(e):
+                raise typer.Exit(1)
+            else:
+                print_info(f"Could not validate issue type against project: {e}")
+
         # Read description from source
         final_description = read_description_from_source(description, description_file)
+        
+        # Handle issue type specification - use ID for subtasks to avoid ambiguity
+        issue_type_field = {"name": issue_type}
+        if issue_type.lower() in ['subtask', 'sub-task']:
+            # For subtasks, try to get the correct issue type from available types
+            try:
+                issue_types = client.get_issue_types()
+                # Look for subtask types that match
+                subtask_types = [it for it in issue_types if it.get('subtask') and 
+                               it['name'].lower() in ['subtask', 'sub-task']]
+                
+                if subtask_types:
+                    # Use the first available subtask type ID
+                    issue_type_field = {"id": subtask_types[0]['id']}
+                    print_info(f"Using issue type: {subtask_types[0]['name']} (ID: {subtask_types[0]['id']})")
+            except Exception as e:
+                print_info(f"Could not resolve subtask type, using name: {e}")
         
         issue_data = {
             "fields": {
                 "project": {"key": project_key},
                 "summary": summary,
-                "issuetype": {"name": issue_type}
+                "issuetype": issue_type_field
             }
         }
         
@@ -175,8 +229,11 @@ def create_issue(
         if due_date:
             issue_data["fields"]["duedate"] = due_date
         
-        # Handle epic linking for stories
-        if epic and issue_type.lower() in ['story', 'task', 'bug']:
+        # Handle parent relationships
+        if parent:
+            issue_data["fields"]["parent"] = {"key": parent}
+        elif epic and issue_type.lower() in ['story', 'task', 'bug']:
+            # Handle epic linking for stories (legacy support)
             issue_data["fields"]["parent"] = {"key": epic}
         
         result = client.create_issue(issue_data)
@@ -449,6 +506,12 @@ def list_subtasks(
 
 
 @app.command("create-subtask")
+@validate_command(
+    issue_key_params=['parent_key'],
+    date_params=['due_date'],
+    required_params=['parent_key', 'summary'],
+    command_context='issues create-subtask'
+)
 def create_subtask(
     parent_key: str = typer.Option(..., "--parent", "-p", help="Parent issue key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Subtask summary"),
@@ -463,50 +526,88 @@ def create_subtask(
     """Create a subtask under a parent issue."""
     try:
         client = JiraApiClient()
-        
+
         # Read description from source
         final_description = read_description_from_source(description, description_file)
-        
-        # Get parent issue to extract project information
-        parent_issue = client.get_issue(parent_key, fields=['project'])
-        project_key = parent_issue['fields']['project']['key']
-        
+
+        # Get parent issue to extract project information and validate parent exists
+        try:
+            parent_issue = client.get_issue(parent_key, fields=['project', 'issuetype', 'status'])
+            project_key = parent_issue['fields']['project']['key']
+        except Exception as e:
+            from ..utils.error_handling import ErrorFormatter
+            ErrorFormatter.print_formatted_error(
+                "Parent Issue Not Found",
+                f"Could not retrieve parent issue '{parent_key}'. Verify the issue key exists and you have permission to view it.",
+                received=f"Parent issue key: '{parent_key}'",
+                expected="Valid issue key that exists and you can access",
+                examples=[
+                    f"{project_key}-123",
+                    f"{project_key.upper()}-456" if project_key else "PROJ-789"
+                ],
+                suggestions=[
+                    "Verify the issue key is correct",
+                    "Check that the issue exists in Jira",
+                    "Ensure you have permission to view the parent issue",
+                    f"Use 'jira-cli issues get {parent_key}' to test access"
+                ],
+                command_context="issues create-subtask"
+            )
+            raise typer.Exit(1)
+
         # Resolve assignee if email provided
         account_id = None
         if assignee:
             if '@' in assignee:  # Email format
-                users = client.search_users(assignee, max_results=1)
-                if not users:
-                    print_error(f"User with email '{assignee}' not found")
+                try:
+                    users = client.search_users(assignee, max_results=1)
+                    if not users:
+                        from ..utils.error_handling import ErrorFormatter
+                        ErrorFormatter.print_formatted_error(
+                            "User Not Found",
+                            f"No user found with email '{assignee}'",
+                            received=f"Email: '{assignee}'",
+                            expected="Valid email address of a Jira user",
+                            suggestions=[
+                                "Verify the email address is correct",
+                                "Check that the user exists in your Jira instance",
+                                "Use account ID instead of email if known"
+                            ],
+                            command_context="issues create-subtask"
+                        )
+                        raise typer.Exit(1)
+                    account_id = users[0]['accountId']
+                except Exception as e:
+                    print_error(f"Error searching for user '{assignee}': {e}")
                     raise typer.Exit(1)
-                account_id = users[0]['accountId']
             else:  # Assume account ID
                 account_id = assignee
-        
+
+        # Create subtask data - issue type resolution is handled in the API layer
         subtask_data = {
             "fields": {
                 "project": {"key": project_key},
                 "summary": summary
             }
         }
-        
+
         if final_description:
             subtask_data["fields"]["description"] = text_to_adf(final_description)
-        
+
         if account_id:
             subtask_data["fields"]["assignee"] = {"accountId": account_id}
-        
+
         if priority:
             subtask_data["fields"]["priority"] = {"name": priority}
-        
+
         if labels:
             subtask_data["fields"]["labels"] = labels
-        
+
         if due_date:
             subtask_data["fields"]["duedate"] = due_date
-        
+
         result = client.create_subtask(parent_key, subtask_data)
-        
+
         if json_output:
             print_json(result)
         else:
@@ -514,9 +615,12 @@ def create_subtask(
             print_success(f"Subtask created: {subtask_key} under parent {parent_key}")
             if final_description:
                 print_info(f"Description: {final_description[:100]}{'...' if len(final_description) > 100 else ''}")
-            
+
     except JiraCliError as e:
-        print_error(str(e))
+        handle_api_error(e, 'issues create-subtask')
+        raise typer.Exit(1)
+    except Exception as e:
+        print_error(f"Unexpected error: {e}")
         raise typer.Exit(1)
 
 

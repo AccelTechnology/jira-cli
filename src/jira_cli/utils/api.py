@@ -60,10 +60,25 @@ class JiraApiClient:
                 error_msg = f"API request failed with status {response.status_code}"
                 try:
                     error_data = response.json()
-                    if 'errorMessages' in error_data:
-                        error_msg = '; '.join(error_data['errorMessages'])
-                    elif 'message' in error_data:
-                        error_msg = error_data['message']
+                    error_parts = []
+                    
+                    # Handle errorMessages array
+                    if 'errorMessages' in error_data and error_data['errorMessages']:
+                        error_parts.extend(error_data['errorMessages'])
+                    
+                    # Handle errors object (field-specific errors)
+                    if 'errors' in error_data and error_data['errors']:
+                        for field, message in error_data['errors'].items():
+                            error_parts.append(f"{field}: {message}")
+                    
+                    # Handle single message field
+                    if 'message' in error_data:
+                        error_parts.append(error_data['message'])
+                    
+                    if error_parts:
+                        error_msg = '; '.join(error_parts)
+                    else:
+                        error_msg = response.text or error_msg
                 except:
                     error_msg = response.text or error_msg
                 
@@ -113,7 +128,7 @@ class JiraApiClient:
         if fields:
             params['fields'] = ','.join(fields)
         
-        return self.get('search', params)
+        return self.get('search/jql', params)
     
     def get_issue(self, issue_key: str, fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """Get issue by key.
@@ -161,7 +176,30 @@ class JiraApiClient:
     def get_issue_types(self) -> List[Dict[str, Any]]:
         """Get all issue types."""
         return self.get('issuetype')
-    
+
+    def get_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
+        """Get issue types available for a specific project.
+
+        Args:
+            project_key: Project key (e.g., 'PD')
+
+        Returns:
+            List of issue types available in the project
+        """
+        try:
+            project_data = self.get(f'project/{project_key}')
+            if 'issueTypes' in project_data:
+                return project_data['issueTypes']
+            else:
+                # Fallback to project creation meta to get issue types
+                creation_meta = self.get(f'issue/createmeta?projectKeys={project_key}&expand=projects.issuetypes')
+                if creation_meta.get('projects'):
+                    return creation_meta['projects'][0].get('issueTypes', [])
+                return []
+        except Exception:
+            # If project-specific lookup fails, return global issue types
+            return self.get_issue_types()
+
     def get_transitions(self, issue_key: str) -> Dict[str, Any]:
         """Get available transitions for issue.
         
@@ -465,19 +503,60 @@ class JiraApiClient:
     
     def create_subtask(self, parent_issue_key: str, subtask_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a subtask under a parent issue.
-        
+
         Args:
             parent_issue_key: Parent issue key
             subtask_data: Subtask creation data
-            
+
         Returns:
             Created subtask data
         """
         # Add parent reference to the subtask data
         subtask_data['fields']['parent'] = {'key': parent_issue_key}
-        # Set issue type to Subtask
-        subtask_data['fields']['issuetype'] = {'name': 'Subtask'}
-        
+
+        # Dynamically resolve subtask issue type to handle project-specific configurations
+        if 'issuetype' not in subtask_data['fields']:
+            try:
+                # First, get the parent issue to determine the project
+                parent_issue = self.get_issue(parent_issue_key, fields=['project'])
+                project_key = parent_issue['fields']['project']['key']
+
+                # Get project-specific issue types
+                issue_types = self.get_project_issue_types(project_key)
+
+                # Look for subtask types that match - check both 'subtask' field and common names
+                subtask_types = []
+                for it in issue_types:
+                    if it.get('subtask') == True or it['name'].lower() in ['subtask', 'sub-task', 'sub task']:
+                        subtask_types.append(it)
+
+                if subtask_types:
+                    # Use the first available subtask type ID for better reliability
+                    subtask_type_id = subtask_types[0]['id']
+                    subtask_data['fields']['issuetype'] = {'id': subtask_type_id}
+
+                    # Debug info to help troubleshooting
+                    print(f"ℹ Using subtask type: {subtask_types[0]['name']} (ID: {subtask_type_id})")
+                else:
+                    # If no subtask types found in project, try global fallback
+                    global_issue_types = self.get_issue_types()
+                    global_subtask_types = [it for it in global_issue_types if it.get('subtask') and
+                                           it['name'].lower() in ['subtask', 'sub-task', 'sub task']]
+
+                    if global_subtask_types:
+                        subtask_type_id = global_subtask_types[0]['id']
+                        subtask_data['fields']['issuetype'] = {'id': subtask_type_id}
+                        print(f"ℹ Using global subtask type: {global_subtask_types[0]['name']} (ID: {subtask_type_id})")
+                    else:
+                        # Final fallback to name-based approach
+                        subtask_data['fields']['issuetype'] = {'name': 'Sub-task'}
+                        print("ℹ Using fallback subtask type name: Sub-task")
+
+            except Exception as e:
+                # Final fallback to standard name
+                subtask_data['fields']['issuetype'] = {'name': 'Sub-task'}
+                print(f"ℹ Using fallback due to error: {e}")
+
         return self.create_issue(subtask_data)
     
     def link_subtask_to_parent(self, subtask_key: str, parent_key: str) -> Dict[str, Any]:
@@ -496,3 +575,275 @@ class JiraApiClient:
             }
         }
         return self.update_issue(subtask_key, update_data)
+    
+    def get_watchers(self, issue_key: str) -> Dict[str, Any]:
+        """Get watchers for an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            
+        Returns:
+            Watchers data
+        """
+        return self.get(f"issue/{issue_key}/watchers")
+    
+    def add_watcher(self, issue_key: str, account_id: Optional[str] = None) -> Dict[str, Any]:
+        """Add a watcher to an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            account_id: Account ID of user to add as watcher (optional, defaults to current user)
+            
+        Returns:
+            Empty response
+        """
+        data = account_id if account_id else None
+        return self.post(f"issue/{issue_key}/watchers", data)
+    
+    def remove_watcher(self, issue_key: str, account_id: Optional[str] = None) -> Dict[str, Any]:
+        """Remove a watcher from an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            account_id: Account ID of user to remove as watcher
+            
+        Returns:
+            Empty response
+        """
+        params = {'accountId': account_id} if account_id else {}
+        return self._make_request('DELETE', f"issue/{issue_key}/watchers", params=params)
+    
+    def get_worklogs(self, issue_key: str, start_at: int = 0, max_results: int = 50) -> Dict[str, Any]:
+        """Get worklogs for an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            start_at: Starting index for pagination
+            max_results: Maximum number of results
+            
+        Returns:
+            Worklogs data
+        """
+        params = {
+            'startAt': start_at,
+            'maxResults': max_results
+        }
+        return self.get(f"issue/{issue_key}/worklog", params)
+    
+    def add_worklog(self, issue_key: str, time_spent: str, comment: Optional[str] = None, 
+                   started: Optional[str] = None) -> Dict[str, Any]:
+        """Add a worklog to an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            time_spent: Time spent (e.g., '1h 30m', '2d', '4h')
+            comment: Optional comment for the worklog
+            started: Optional start time (ISO 8601 format, defaults to now)
+            
+        Returns:
+            Created worklog data
+        """
+        data = {
+            'timeSpent': time_spent
+        }
+        
+        if comment:
+            data['comment'] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "text": comment,
+                                "type": "text"
+                            }
+                        ]
+                    }
+                ]
+            }
+        
+        if started:
+            data['started'] = started
+            
+        return self.post(f"issue/{issue_key}/worklog", data)
+    
+    def update_worklog(self, issue_key: str, worklog_id: str, time_spent: Optional[str] = None,
+                      comment: Optional[str] = None, started: Optional[str] = None) -> Dict[str, Any]:
+        """Update a worklog.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            worklog_id: Worklog ID
+            time_spent: Time spent (e.g., '1h 30m', '2d', '4h')
+            comment: Optional comment for the worklog
+            started: Optional start time (ISO 8601 format)
+            
+        Returns:
+            Updated worklog data
+        """
+        data = {}
+        
+        if time_spent:
+            data['timeSpent'] = time_spent
+            
+        if comment:
+            data['comment'] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "text": comment,
+                                "type": "text"
+                            }
+                        ]
+                    }
+                ]
+            }
+        
+        if started:
+            data['started'] = started
+            
+        return self.put(f"issue/{issue_key}/worklog/{worklog_id}", data)
+    
+    def delete_worklog(self, issue_key: str, worklog_id: str) -> Dict[str, Any]:
+        """Delete a worklog.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            worklog_id: Worklog ID
+            
+        Returns:
+            Empty response
+        """
+        return self._make_request('DELETE', f"issue/{issue_key}/worklog/{worklog_id}")
+    
+    def get_attachment(self, attachment_id: str) -> Dict[str, Any]:
+        """Get attachment metadata.
+        
+        Args:
+            attachment_id: Attachment ID
+            
+        Returns:
+            Attachment metadata
+        """
+        return self.get(f"attachment/{attachment_id}")
+    
+    def download_attachment(self, attachment_id: str) -> bytes:
+        """Download attachment content.
+        
+        Args:
+            attachment_id: Attachment ID
+            
+        Returns:
+            Attachment content as bytes
+        """
+        url = f"{self.base_url}/rest/api/3/attachment/content/{attachment_id}"
+        response = self.session.get(url)
+        response.raise_for_status()
+        return response.content
+    
+    def upload_attachment(self, issue_key: str, file_path: str) -> List[Dict[str, Any]]:
+        """Upload an attachment to an issue.
+        
+        Args:
+            issue_key: Issue key (e.g., 'PROJ-123')
+            file_path: Path to the file to upload
+            
+        Returns:
+            List of uploaded attachment data
+        """
+        import os
+        if not os.path.exists(file_path):
+            raise JiraApiError(f"File not found: {file_path}")
+            
+        url = f"{self.base_url}/rest/api/3/issue/{issue_key}/attachments"
+        
+        # Special headers required for attachments
+        headers = self.headers.copy()
+        headers['X-Atlassian-Token'] = 'no-check'
+        del headers['Content-Type']  # Let requests set this for multipart
+        
+        with open(file_path, 'rb') as f:
+            files = {'file': (os.path.basename(file_path), f, 'application/octet-stream')}
+            response = self.session.post(url, files=files, headers=headers)
+        
+        if response.status_code not in [200, 201]:
+            raise JiraApiError(f"Upload failed: {response.status_code} {response.text}")
+        
+        return response.json()
+    
+    def delete_attachment(self, attachment_id: str) -> Dict[str, Any]:
+        """Delete an attachment.
+        
+        Args:
+            attachment_id: Attachment ID
+            
+        Returns:
+            Empty response
+        """
+        return self._make_request('DELETE', f"attachment/{attachment_id}")
+    
+    def bulk_transition_issues(self, transitions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Bulk transition multiple issues.
+        
+        Args:
+            transitions: List of transition requests, each containing:
+                - issueIds: List of issue IDs or keys
+                - transition: Dict with 'id' field for transition ID
+                
+        Returns:
+            Bulk operation result
+        """
+        data = {
+            'transitions': transitions
+        }
+        return self.post("bulk/issues/transition", data)
+    
+    def bulk_edit_issues(self, issue_ids: List[str], fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Bulk edit multiple issues.
+        
+        Args:
+            issue_ids: List of issue IDs or keys
+            fields: Dictionary of fields to update
+            
+        Returns:
+            Bulk operation result
+        """
+        data = {
+            'issueIds': issue_ids,
+            'fields': fields
+        }
+        return self.post("bulk/issues/fields", data)
+    
+    def bulk_watch_issues(self, issue_ids: List[str]) -> Dict[str, Any]:
+        """Bulk watch multiple issues.
+        
+        Args:
+            issue_ids: List of issue IDs or keys
+            
+        Returns:
+            Bulk operation result
+        """
+        data = {
+            'issueIds': issue_ids
+        }
+        return self.post("bulk/issues/watch", data)
+    
+    def bulk_unwatch_issues(self, issue_ids: List[str]) -> Dict[str, Any]:
+        """Bulk unwatch multiple issues.
+        
+        Args:
+            issue_ids: List of issue IDs or keys
+            
+        Returns:
+            Bulk operation result
+        """
+        data = {
+            'issueIds': issue_ids
+        }
+        return self.post("bulk/issues/unwatch", data)

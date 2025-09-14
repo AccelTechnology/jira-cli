@@ -199,9 +199,81 @@ def validate_choice(param_name: str, valid_choices: List[str], command_context: 
     return decorator
 
 
+def validate_project_issue_type(project_key: str, issue_type: str, command_context: str = '') -> str:
+    """Validate that an issue type exists in the specified project.
+
+    Args:
+        project_key: Project key to validate against
+        issue_type: Issue type name or ID to validate
+        command_context: Command context for error messages
+
+    Returns:
+        Validated issue type (may return ID if name was provided)
+
+    Raises:
+        ValidationError: If issue type is not valid for the project
+    """
+    try:
+        from ..utils.api import JiraApiClient
+        from .error_handling import ErrorFormatter
+
+        client = JiraApiClient()
+
+        # Get project details to access issue types
+        project = client.get_project(project_key)
+        available_types = project.get('issueTypes', [])
+
+        if not available_types:
+            # Fallback to global issue types if project doesn't provide them
+            available_types = client.get_issue_types()
+
+        # Check if issue_type matches by name or ID
+        matching_type = None
+        for issue_type_info in available_types:
+            if (issue_type.lower() == issue_type_info['name'].lower() or
+                issue_type == issue_type_info['id'] or
+                str(issue_type) == str(issue_type_info['id'])):
+                matching_type = issue_type_info
+                break
+
+        if not matching_type:
+            # Generate helpful suggestions
+            type_names = [it['name'] for it in available_types]
+            subtask_types = [it['name'] for it in available_types if it.get('subtask')]
+            regular_types = [it['name'] for it in available_types if not it.get('subtask')]
+
+            suggestions = [
+                f"Use one of the available issue types for project {project_key}",
+                "Check project configuration for issue type restrictions"
+            ]
+
+            if subtask_types and issue_type.lower() in ['subtask', 'sub-task']:
+                suggestions.append(f"For subtasks, use: {', '.join(subtask_types)}")
+
+            ErrorFormatter.print_formatted_error(
+                "Invalid Issue Type",
+                f"Issue type '{issue_type}' is not available in project '{project_key}'.",
+                received=f"Issue type: '{issue_type}'",
+                expected=f"One of the available issue types for project {project_key}",
+                examples=type_names[:5],  # Show first 5 available types
+                suggestions=suggestions,
+                command_context=command_context
+            )
+            raise ValidationError(f"Invalid issue type '{issue_type}' for project '{project_key}'")
+
+        return matching_type['name']  # Return the canonical name
+
+    except ValidationError:
+        raise
+    except Exception as e:
+        # If we can't validate (API error, etc.), allow it to proceed
+        # The actual API call will handle the final validation
+        return issue_type
+
+
 def handle_errors(command_context: str = ''):
     """Decorator to handle and format errors consistently.
-    
+
     Args:
         command_context: Command context for error messages
     """

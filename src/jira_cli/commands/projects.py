@@ -61,14 +61,34 @@ def get_project(
 
 @app.command("issue-types")
 def list_issue_types(
+    project_key: Optional[str] = typer.Option(None, "--project", "-p", help="Project key (optional - shows project-specific types)"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
     table: bool = typer.Option(False, "--table", help="Output as table")
 ):
-    """List all issue types."""
+    """List issue types. Optionally specify a project to see project-specific types."""
     try:
         client = JiraApiClient()
-        issue_types = client.get_issue_types()
-        
+
+        if project_key:
+            # Get project-specific issue types
+            try:
+                project = client.get_project(project_key)
+                issue_types = project.get('issueTypes', [])
+                if not issue_types:
+                    # Fallback to global types if project doesn't have specific ones
+                    issue_types = client.get_issue_types()
+                    print_success(f"No project-specific issue types found for {project_key}. Showing global types.")
+                else:
+                    print_success(f"Issue types available in project {project_key}:")
+            except Exception as e:
+                print_error(f"Could not get project-specific issue types for {project_key}: {e}")
+                print_success("Showing global issue types instead:")
+                issue_types = client.get_issue_types()
+        else:
+            # Get global issue types
+            issue_types = client.get_issue_types()
+            print_success("Global issue types (use --project to see project-specific types):")
+
         if json_output:
             print_json(issue_types)
         elif table:
@@ -76,7 +96,7 @@ def list_issue_types(
             console.print(types_table)
         else:
             print_json(issue_types)
-            
+
     except JiraCliError as e:
         print_error(str(e))
         raise typer.Exit(1)
