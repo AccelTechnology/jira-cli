@@ -25,17 +25,9 @@ A comprehensive command-line interface for Jira REST API operations, built with 
 - **Jira Cloud or Server** with REST API access
 - **Jira API token** (for Jira Cloud) or Personal Access Token (for Jira Server/DC)
 
-### Quick Install
+### System-Wide Installation (Recommended)
 
-Choose the installation method that works best for your operating system:
-
-#### 🪟 Windows
-
-```cmd
-git clone https://github.com/AccelTechnology/jira-cli.git
-cd jira-cli
-install.bat
-```
+The easiest way to install Jira CLI system-wide is using the provided installation scripts:
 
 #### 🐧 Linux / 🍎 macOS
 
@@ -46,7 +38,21 @@ chmod +x install.sh
 ./install.sh
 ```
 
-#### 🐍 Python Install Script
+The `install.sh` script will:
+- Detect your Python installation automatically
+- Offer to create a virtual environment (recommended)
+- Install all dependencies
+- Make both `jira-cli` and `jira` commands available system-wide
+
+#### 🪟 Windows
+
+```cmd
+git clone https://github.com/AccelTechnology/jira-cli.git
+cd jira-cli
+install.bat
+```
+
+#### 🐍 Python Install Script (Cross-platform)
 
 ```bash
 git clone https://github.com/AccelTechnology/jira-cli.git
@@ -97,9 +103,10 @@ pip install -e .
 sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 
-# Clone and install
+# Clone and install system-wide
 git clone https://github.com/AccelTechnology/jira-cli.git
 cd jira-cli
+chmod +x install.sh
 ./install.sh
 ```
 
@@ -110,9 +117,10 @@ sudo yum install python3 python3-pip git  # CentOS/RHEL
 # OR
 sudo dnf install python3 python3-pip git  # Fedora
 
-# Clone and install
+# Clone and install system-wide
 git clone https://github.com/AccelTechnology/jira-cli.git
 cd jira-cli
+chmod +x install.sh
 ./install.sh
 ```
 
@@ -121,9 +129,10 @@ cd jira-cli
 # Install Python via Homebrew
 brew install python3
 
-# Clone and install
+# Clone and install system-wide
 git clone https://github.com/AccelTechnology/jira-cli.git
 cd jira-cli
+chmod +x install.sh
 ./install.sh
 ```
 
@@ -143,7 +152,7 @@ cd jira-cli
 
 ### Development Installation
 
-For contributors and developers:
+For contributors and developers who want to work on the Jira CLI codebase:
 
 ```bash
 git clone https://github.com/AccelTechnology/jira-cli.git
@@ -152,7 +161,10 @@ chmod +x install-dev.sh
 ./install-dev.sh
 ```
 
-This installs additional development tools: `black`, `isort`, `flake8`, `pytest`, `mypy`
+The `install-dev.sh` script will:
+- Install Jira CLI in editable mode (`pip install -e .`)
+- Install additional development tools: `black`, `isort`, `flake8`, `pytest`, `pytest-cov`, `mypy`
+- Set up the development environment for code formatting, linting, and testing
 
 ### Verify Installation
 
