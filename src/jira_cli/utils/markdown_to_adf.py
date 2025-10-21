@@ -1,17 +1,16 @@
 """Markdown to Atlassian Document Format (ADF) converter."""
 
 import re
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 import mistune
-from mistune import HTMLRenderer
+from mistune import BaseRenderer
 
 
-class ADFRenderer(HTMLRenderer):
+class ADFRenderer(BaseRenderer):
     """Custom mistune renderer that outputs ADF format instead of HTML."""
 
     def __init__(self):
         super().__init__()
-        self.content_stack = []
         self.current_content = []
 
     def finalize_data(self) -> Dict[str, Any]:
@@ -26,214 +25,416 @@ class ADFRenderer(HTMLRenderer):
             ),
         }
 
-    def paragraph(self, text: str) -> str:
+    def render_token(self, token: Dict[str, Any], state: Any) -> Any:
+        """Render a single token."""
+        func = self._get_method(token["type"])
+        return func(token, state)
+
+    def render_tokens(self, tokens: List[Dict[str, Any]], state: Any) -> List[Any]:
+        """Render a list of tokens."""
+        results = []
+        for token in tokens:
+            result = self.render_token(token, state)
+            if result is not None:
+                if isinstance(result, list):
+                    results.extend(result)
+                else:
+                    results.append(result)
+        return results
+
+    def render_children(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Render children tokens and return as ADF content."""
+        if "children" in token:
+            return self.render_tokens(token["children"], state)
+        return []
+
+    def paragraph(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
         """Handle paragraph elements."""
-        content = self._parse_inline_content(text)
-        if content:  # Only add non-empty paragraphs
-            self.current_content.append({"type": "paragraph", "content": content})
-        return ""
+        content = self.render_children(token, state)
+        adf_node = {"type": "paragraph", "content": content if content else [{"type": "text", "text": ""}]}
+        self.current_content.append(adf_node)
+        return adf_node
 
-    def heading(self, text: str, level: int) -> str:
+    def heading(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
         """Handle heading elements (h1-h6)."""
-        content = self._parse_inline_content(text)
-        self.current_content.append(
-            {
-                "type": "heading",
-                "attrs": {"level": min(level, 6)},  # ADF supports levels 1-6
-                "content": content,
-            }
-        )
-        return ""
+        content = self.render_children(token, state)
+        level = token.get("attrs", {}).get("level", 1)
+        adf_node = {
+            "type": "heading",
+            "attrs": {"level": min(max(level, 1), 6)},
+            "content": content if content else [{"type": "text", "text": ""}],
+        }
+        self.current_content.append(adf_node)
+        return adf_node
 
-    def list(self, text: str, ordered: bool = False, **attrs) -> str:
-        """Handle list elements (ul/ol)."""
-        # Parse list items from text
-        items = self._parse_list_items(text)
-        if items:
-            list_type = "orderedList" if ordered else "bulletList"
-            self.current_content.append({"type": list_type, "content": items})
-        return ""
+    def text(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle plain text."""
+        return {"type": "text", "text": token.get("raw", "")}
 
-    def list_item(self, text: str) -> str:
-        """Handle list item elements."""
-        content = self._parse_inline_content(text)
+    def strong(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle bold/strong text."""
+        children = self.render_children(token, state)
+        # Apply strong mark to all text children
+        result = []
+        for child in children:
+            if child.get("type") == "text":
+                marks = child.get("marks", [])
+                marks.append({"type": "strong"})
+                child["marks"] = marks
+                result.append(child)
+            else:
+                result.append(child)
+        return result
+
+    def emphasis(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle italic/emphasis text."""
+        children = self.render_children(token, state)
+        # Apply em mark to all text children
+        result = []
+        for child in children:
+            if child.get("type") == "text":
+                marks = child.get("marks", [])
+                marks.append({"type": "em"})
+                child["marks"] = marks
+                result.append(child)
+            else:
+                result.append(child)
+        return result
+
+    def strikethrough(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle strikethrough text."""
+        children = self.render_children(token, state)
+        # Apply strike mark to all text children
+        result = []
+        for child in children:
+            if child.get("type") == "text":
+                marks = child.get("marks", [])
+                marks.append({"type": "strike"})
+                child["marks"] = marks
+                result.append(child)
+            else:
+                result.append(child)
+        return result
+
+    def codespan(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle inline code."""
         return {
-            "type": "listItem",
-            "content": [{"type": "paragraph", "content": content}],
+            "type": "text",
+            "text": token.get("raw", ""),
+            "marks": [{"type": "code"}],
         }
 
-    def blockquote(self, text: str) -> str:
-        """Handle blockquote elements."""
-        # Parse content inside blockquote
-        content = []
-        paragraphs = text.strip().split("\n\n")
-        for para in paragraphs:
-            if para.strip():
-                inline_content = self._parse_inline_content(para.strip())
-                content.append({"type": "paragraph", "content": inline_content})
+    def link(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle links."""
+        children = self.render_children(token, state)
+        url = token.get("attrs", {}).get("url", "")
 
-        self.current_content.append({"type": "blockquote", "content": content})
-        return ""
+        # Apply link mark to all text children
+        result = []
+        for child in children:
+            if child.get("type") == "text":
+                marks = child.get("marks", [])
+                marks.append({"type": "link", "attrs": {"href": url}})
+                child["marks"] = marks
+                result.append(child)
+            else:
+                result.append(child)
+        return result
 
-    def block_code(self, code: str, lang: Optional[str] = None) -> str:
+    def block_code(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
         """Handle code block elements."""
         attrs = {}
-        if lang:
-            attrs["language"] = lang
+        info = token.get("attrs", {}).get("info")
+        if info:
+            attrs["language"] = info.strip()
 
-        self.current_content.append(
-            {
-                "type": "codeBlock",
-                "attrs": attrs,
-                "content": [{"type": "text", "text": code}],
-            }
-        )
-        return ""
+        adf_node = {
+            "type": "codeBlock",
+            "attrs": attrs,
+            "content": [{"type": "text", "text": token.get("raw", "")}],
+        }
+        self.current_content.append(adf_node)
+        return adf_node
 
-    def block_html(self, html: str) -> str:
+    def list(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle list elements (ul/ol)."""
+        ordered = token.get("attrs", {}).get("ordered", False)
+        children = token.get("children", [])
+
+        # Check if this is a task list (has task_list_item children)
+        is_task_list = any(child.get("type") == "task_list_item" for child in children)
+
+        if is_task_list:
+            # Convert task lists to regular bullet lists with [] / [x] syntax
+            # Note: Jira Cloud may not support taskList in all configurations
+            items = []
+            for child in children:
+                if child.get("type") == "task_list_item":
+                    checked = child.get("attrs", {}).get("checked", False)
+                    checkbox = "[x]" if checked else "[]"
+
+                    # Render child content
+                    child_content = []
+                    for grandchild in child.get("children", []):
+                        if grandchild.get("type") == "block_text":
+                            inline_content = self.render_children(grandchild, state)
+                            if inline_content:
+                                child_content.extend(inline_content)
+
+                    # Prepend checkbox to content
+                    final_content = [{"type": "text", "text": f"{checkbox} "}]
+                    final_content.extend(child_content)
+
+                    items.append({
+                        "type": "listItem",
+                        "content": [{"type": "paragraph", "content": final_content}]
+                    })
+
+            if items:
+                adf_node = {"type": "bulletList", "content": items}
+                self.current_content.append(adf_node)
+                return adf_node
+        else:
+            # Regular list
+            list_type = "orderedList" if ordered else "bulletList"
+            items = []
+            for child in children:
+                if child.get("type") == "list_item":
+                    item_content = self.list_item(child, state)
+                    if item_content:
+                        items.append(item_content)
+
+            if items:
+                adf_node = {"type": list_type, "content": items}
+                self.current_content.append(adf_node)
+                return adf_node
+        return None
+
+    def list_item(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle list item elements."""
+        # Render children (which could be paragraphs, nested lists, etc.)
+        children = token.get("children", [])
+        item_content = []
+
+        for child in children:
+            child_type = child.get("type")
+
+            if child_type == "block_text":
+                # Inline content directly in the list item
+                inline_content = self.render_children(child, state)
+                if inline_content:
+                    item_content.append({"type": "paragraph", "content": inline_content})
+
+            elif child_type == "paragraph":
+                # Paragraph in list item
+                para_content = self.render_children(child, state)
+                if para_content:
+                    item_content.append({"type": "paragraph", "content": para_content})
+
+            elif child_type == "list":
+                # Nested list
+                nested_list = self.list(child, state)
+                if nested_list:
+                    item_content.append(nested_list)
+
+        return {"type": "listItem", "content": item_content if item_content else [{"type": "paragraph", "content": [{"type": "text", "text": ""}]}]}
+
+    def task_list_item(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle task list item elements (checkboxes)."""
+        checked = token.get("attrs", {}).get("checked", False)
+        children = token.get("children", [])
+        item_content = []
+
+        for child in children:
+            child_type = child.get("type")
+
+            if child_type == "block_text":
+                # Inline content directly in the list item
+                inline_content = self.render_children(child, state)
+                if inline_content:
+                    item_content.append({"type": "paragraph", "content": inline_content})
+
+            elif child_type == "paragraph":
+                # Paragraph in list item
+                para_content = self.render_children(child, state)
+                if para_content:
+                    item_content.append({"type": "paragraph", "content": para_content})
+
+        return {
+            "type": "taskItem",
+            "attrs": {"localId": f"task-{id(token)}", "state": "DONE" if checked else "TODO"},
+            "content": item_content if item_content else [{"type": "paragraph", "content": [{"type": "text", "text": ""}]}]
+        }
+
+    def blockquote(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle blockquote elements."""
+        children = token.get("children", [])
+        content = []
+
+        for child in children:
+            # Store current_content temporarily
+            temp_content = self.current_content
+            self.current_content = []
+
+            # Render child (usually paragraphs)
+            self.render_token(child, state)
+
+            # Get rendered content
+            content.extend(self.current_content)
+
+            # Restore current_content
+            self.current_content = temp_content
+
+        if content:
+            adf_node = {"type": "blockquote", "content": content}
+            self.current_content.append(adf_node)
+            return adf_node
+        return None
+
+    def block_quote(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle blockquote elements (alternate naming)."""
+        return self.blockquote(token, state)
+
+    def thematic_break(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle horizontal rules."""
+        adf_node = {"type": "rule"}
+        self.current_content.append(adf_node)
+        return adf_node
+
+    def block_html(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
         """Handle raw HTML blocks (convert to text)."""
         # Strip HTML tags and treat as plain text
+        html = token.get("raw", "")
         text = re.sub(r"<[^>]+>", "", html)
         if text.strip():
-            self.current_content.append(
-                {
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": text.strip()}],
-                }
-            )
-        return ""
+            adf_node = {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": text.strip()}],
+            }
+            self.current_content.append(adf_node)
+            return adf_node
+        return None
 
-    def thematic_break(self) -> str:
-        """Handle horizontal rules."""
-        self.current_content.append({"type": "rule"})
-        return ""
+    def block_text(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle block text (used in list items)."""
+        return self.render_children(token, state)
 
-    def table(self, text: str) -> str:
+    def linebreak(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle line breaks."""
+        # ADF doesn't have explicit linebreak, use text with newline
+        return {"type": "text", "text": "\n"}
+
+    def softbreak(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle soft breaks."""
+        # Treat as space
+        return {"type": "text", "text": " "}
+
+    def blank_line(self, token: Dict[str, Any], state: Any) -> None:
+        """Handle blank lines (usually just separators)."""
+        # Blank lines are just separators in markdown, don't render anything
+        return None
+
+    def table(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
         """Handle table elements."""
-        # Parse table structure from text
-        rows = self._parse_table_rows(text)
-        if rows:
-            self.current_content.append(
-                {
-                    "type": "table",
-                    "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
-                    "content": rows,
-                }
-            )
-        return ""
-
-    def _parse_inline_content(self, text: str) -> List[Dict[str, Any]]:
-        """Parse inline markdown content (bold, italic, code, links)."""
-        if not text:
-            return []
-
-        content = []
-        current_pos = 0
-
-        # Patterns for inline markdown
-        patterns = [
-            (r"\*\*(.*?)\*\*", "strong"),  # Bold
-            (r"\*(.*?)\*", "em"),  # Italic
-            (r"`([^`]+)`", "code"),  # Inline code
-            (r"\[([^\]]+)\]\(([^)]+)\)", "link"),  # Links
-        ]
-
-        # Find all matches
-        matches = []
-        for pattern, mark_type in patterns:
-            for match in re.finditer(pattern, text):
-                matches.append((match.start(), match.end(), match, mark_type))
-
-        # Sort matches by position
-        matches.sort(key=lambda x: x[0])
-
-        # Process text with matches
-        for start, end, match, mark_type in matches:
-            # Add text before match
-            if start > current_pos:
-                content.append({"type": "text", "text": text[current_pos:start]})
-
-            # Add formatted text
-            if mark_type == "link":
-                content.append(
-                    {
-                        "type": "text",
-                        "text": match.group(1),
-                        "marks": [{"type": "link", "attrs": {"href": match.group(2)}}],
-                    }
-                )
-            elif mark_type == "code":
-                content.append(
-                    {
-                        "type": "text",
-                        "text": match.group(1),
-                        "marks": [{"type": "code"}],
-                    }
-                )
-            else:  # strong, em
-                content.append(
-                    {
-                        "type": "text",
-                        "text": match.group(1),
-                        "marks": [{"type": mark_type}],
-                    }
-                )
-
-            current_pos = end
-
-        # Add remaining text
-        if current_pos < len(text):
-            content.append({"type": "text", "text": text[current_pos:]})
-
-        # If no formatting found, return simple text
-        if not content:
-            content.append({"type": "text", "text": text})
-
-        return content
-
-    def _parse_list_items(self, text: str) -> List[Dict[str, Any]]:
-        """Parse list items from HTML-like text."""
-        items = []
-        # This is a simplified parser - in practice, mistune would call list_item for each item
-        lines = text.strip().split("\n")
-        for line in lines:
-            line = line.strip()
-            if line:
-                content = self._parse_inline_content(line)
-                items.append(
-                    {
-                        "type": "listItem",
-                        "content": [{"type": "paragraph", "content": content}],
-                    }
-                )
-        return items
-
-    def _parse_table_rows(self, text: str) -> List[Dict[str, Any]]:
-        """Parse table rows from text."""
-        # This is a simplified implementation
-        # In practice, you'd need a more sophisticated table parser
+        children = token.get("children", [])
         rows = []
-        lines = text.strip().split("\n")
 
-        for line in lines:
-            if "|" in line:
-                cells = [cell.strip() for cell in line.split("|") if cell.strip()]
-                if cells:
-                    row_content = []
-                    for cell in cells:
-                        cell_content = self._parse_inline_content(cell)
-                        row_content.append(
-                            {
-                                "type": "tableCell",
-                                "content": [
-                                    {"type": "paragraph", "content": cell_content}
-                                ],
-                            }
-                        )
+        for child in children:
+            child_type = child.get("type")
+            if child_type == "table_head":
+                # Process header row
+                row = self.table_head(child, state)
+                if row:
+                    rows.append(row)
+            elif child_type == "table_body":
+                # Process body rows
+                body_rows = self.table_body(child, state)
+                rows.extend(body_rows)
 
-                    rows.append({"type": "tableRow", "content": row_content})
+        if rows:
+            adf_node = {
+                "type": "table",
+                "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
+                "content": rows
+            }
+            self.current_content.append(adf_node)
+            return adf_node
+        return None
+
+    def table_head(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle table header row."""
+        children = token.get("children", [])
+        cells = []
+
+        for child in children:
+            if child.get("type") == "table_cell":
+                cell_content = self.render_children(child, state)
+                cells.append({
+                    "type": "tableHeader",
+                    "content": [{"type": "paragraph", "content": cell_content if cell_content else [{"type": "text", "text": ""}]}]
+                })
+
+        return {"type": "tableRow", "content": cells}
+
+    def table_body(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle table body rows."""
+        children = token.get("children", [])
+        rows = []
+
+        for child in children:
+            if child.get("type") == "table_row":
+                row = self.table_row(child, state)
+                if row:
+                    rows.append(row)
 
         return rows
+
+    def table_row(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle table row."""
+        children = token.get("children", [])
+        cells = []
+
+        for child in children:
+            if child.get("type") == "table_cell":
+                cell_content = self.render_children(child, state)
+                cells.append({
+                    "type": "tableCell",
+                    "content": [{"type": "paragraph", "content": cell_content if cell_content else [{"type": "text", "text": ""}]}]
+                })
+
+        return {"type": "tableRow", "content": cells}
+
+    def table_cell(self, token: Dict[str, Any], state: Any) -> List[Dict[str, Any]]:
+        """Handle table cell - just return rendered children."""
+        return self.render_children(token, state)
+
+    def image(self, token: Dict[str, Any], state: Any) -> Dict[str, Any]:
+        """Handle image elements."""
+        attrs = token.get("attrs", {})
+        url = attrs.get("url", "")
+        alt_text = attrs.get("alt", "")
+        title = attrs.get("title", "")
+
+        # ADF represents images as mediaSingle containing media nodes
+        media_attrs = {
+            "type": "external",
+            "url": url
+        }
+
+        if alt_text:
+            media_attrs["alt"] = alt_text
+
+        # Return as inline content (will be wrapped in paragraph by parent)
+        return {
+            "type": "mediaSingle",
+            "attrs": {"layout": "center"},
+            "content": [
+                {
+                    "type": "media",
+                    "attrs": media_attrs
+                }
+            ]
+        }
 
 
 def markdown_to_adf(markdown_text: str) -> Dict[str, Any]:
@@ -262,8 +463,12 @@ def markdown_to_adf(markdown_text: str) -> Dict[str, Any]:
     # Create custom renderer
     renderer = ADFRenderer()
 
-    # Create markdown parser with custom renderer
-    markdown = mistune.create_markdown(renderer=renderer)
+    # Create markdown parser with custom renderer and plugins
+    # Enable plugins for extended markdown features
+    markdown = mistune.create_markdown(
+        renderer=renderer,
+        plugins=['strikethrough', 'table', 'task_lists']
+    )
 
     # Parse markdown (this will populate the renderer's content)
     markdown(markdown_text)

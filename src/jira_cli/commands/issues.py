@@ -17,19 +17,11 @@ from ..utils.formatting import (
 )
 from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
+from ..utils.markdown_to_adf import markdown_to_adf
 from ..exceptions import JiraCliError
 
 console = Console()
 app = typer.Typer(help="Manage Jira issues")
-
-
-def text_to_adf(text: str) -> dict:
-    """Convert plain text to Atlassian Document Format (ADF)."""
-    return {
-        "type": "doc",
-        "version": 1,
-        "content": [{"type": "paragraph", "content": [{"text": text, "type": "text"}]}],
-    }
 
 
 def read_description_from_source(
@@ -254,7 +246,7 @@ def create_issue(
         }
 
         if final_description:
-            issue_data["fields"]["description"] = text_to_adf(final_description)
+            issue_data["fields"]["description"] = markdown_to_adf(final_description)
 
         if assignee:
             issue_data["fields"]["assignee"] = {"accountId": assignee}
@@ -296,6 +288,9 @@ def update_issue(
     description: Optional[str] = typer.Option(
         None, "--description", "-d", help="New description"
     ),
+    description_file: Optional[str] = typer.Option(
+        None, "--description-file", "-f", help="Read description from file"
+    ),
     assignee: Optional[str] = typer.Option(
         None, "--assignee", "-a", help="New assignee account ID"
     ),
@@ -317,13 +312,16 @@ def update_issue(
     try:
         client = JiraApiClient()
 
+        # Read description from source
+        final_description = read_description_from_source(description, description_file)
+
         fields = {}
 
         if summary:
             fields["summary"] = summary
 
-        if description:
-            fields["description"] = text_to_adf(description)
+        if final_description:
+            fields["description"] = markdown_to_adf(final_description)
 
         if assignee:
             fields["assignee"] = {"accountId": assignee}
@@ -667,7 +665,7 @@ def create_subtask(
         subtask_data = {"fields": {"project": {"key": project_key}, "summary": summary}}
 
         if final_description:
-            subtask_data["fields"]["description"] = text_to_adf(final_description)
+            subtask_data["fields"]["description"] = markdown_to_adf(final_description)
 
         if account_id:
             subtask_data["fields"]["assignee"] = {"accountId": account_id}
@@ -786,7 +784,7 @@ def create_epic(
         }
 
         if description:
-            epic_data["fields"]["description"] = text_to_adf(description)
+            epic_data["fields"]["description"] = markdown_to_adf(description)
 
         if assignee:
             epic_data["fields"]["assignee"] = {"accountId": assignee}
@@ -867,7 +865,7 @@ def create_epic_command(
         }
 
         if final_description:
-            epic_data["fields"]["description"] = text_to_adf(final_description)
+            epic_data["fields"]["description"] = markdown_to_adf(final_description)
 
         if account_id:
             epic_data["fields"]["assignee"] = {"accountId": account_id}
@@ -927,7 +925,7 @@ def create_epic_interactive(
         }
 
         if description.strip():
-            epic_data["fields"]["description"] = text_to_adf(description.strip())
+            epic_data["fields"]["description"] = markdown_to_adf(description.strip())
 
         if assignee.strip():
             epic_data["fields"]["assignee"] = {"accountId": assignee.strip()}
@@ -1437,7 +1435,7 @@ def create_story_command(
         }
 
         if final_description:
-            story_data["fields"]["description"] = text_to_adf(final_description)
+            story_data["fields"]["description"] = markdown_to_adf(final_description)
 
         if account_id:
             story_data["fields"]["assignee"] = {"accountId": account_id}
@@ -1509,7 +1507,7 @@ def create_story_interactive(
         }
 
         if description.strip():
-            story_data["fields"]["description"] = text_to_adf(description.strip())
+            story_data["fields"]["description"] = markdown_to_adf(description.strip())
 
         if assignee.strip():
             story_data["fields"]["assignee"] = {"accountId": assignee.strip()}
