@@ -351,6 +351,58 @@ class JiraApiClient:
 
         return content_nodes
 
+    def _process_mentions_in_adf(self, adf_doc: Dict[str, Any]) -> Dict[str, Any]:
+        """Process @mentions in an ADF document structure.
+
+        Recursively walks through the ADF document and replaces text nodes
+        containing @mentions with proper mention nodes.
+
+        Args:
+            adf_doc: ADF document structure
+
+        Returns:
+            Updated ADF document with mentions processed
+        """
+        import re
+        from copy import deepcopy
+
+        doc = deepcopy(adf_doc)
+
+        def process_content_list(content_list):
+            """Process a list of content nodes."""
+            new_content = []
+
+            for node in content_list:
+                if node.get("type") == "text" and "text" in node:
+                    # Check if this text node contains mentions
+                    text = node["text"]
+                    mention_pattern = r"@(?:accountid:([a-f0-9\-]{36})|([a-zA-Z0-9._-]+(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?|[a-zA-Z0-9._-]+))"
+
+                    if re.search(mention_pattern, text):
+                        # Parse mentions and split into multiple nodes
+                        parsed_nodes = self._parse_mentions_in_text(text)
+                        # Preserve marks from original node
+                        if "marks" in node:
+                            for parsed_node in parsed_nodes:
+                                if parsed_node.get("type") == "text":
+                                    parsed_node["marks"] = node["marks"]
+                        new_content.extend(parsed_nodes)
+                    else:
+                        new_content.append(node)
+                elif "content" in node:
+                    # Recursively process child content
+                    node["content"] = process_content_list(node["content"])
+                    new_content.append(node)
+                else:
+                    new_content.append(node)
+
+            return new_content
+
+        if "content" in doc:
+            doc["content"] = process_content_list(doc["content"])
+
+        return doc
+
     def add_comment(
         self,
         issue_key: str,
@@ -369,13 +421,16 @@ class JiraApiClient:
         Returns:
             Created comment data
         """
-        if is_markdown and not parse_mentions:
-            # Use full markdown parsing (without mention support)
+        if is_markdown:
+            # Use full markdown parsing
             from .markdown_to_adf import markdown_to_adf
-
             adf_body = markdown_to_adf(body)
+
+            # If mention parsing is enabled, process mentions in the ADF structure
+            if parse_mentions:
+                adf_body = self._process_mentions_in_adf(adf_body)
         elif parse_mentions:
-            # Parse mentions in text (existing behavior)
+            # Parse mentions only (no markdown)
             content_nodes = self._parse_mentions_in_text(body)
             adf_body = {
                 "type": "doc",
