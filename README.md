@@ -11,7 +11,11 @@ A comprehensive command-line interface for Jira REST API operations, built with 
 - **🏗️ Project Operations**: List projects, get project details, manage versions, components, and issue types
 - **👥 User Management**: Search users, mention users in comments with automatic lookup
 - **💬 Smart Comments**: Add comments with @mention support for better collaboration
-- **📝 Markdown Support**: Full markdown parsing for descriptions and comments with ADF conversion
+- **📝 Full Markdown Support**: Comprehensive markdown parsing with tables, task lists, code blocks, strikethrough, and more
+  - Write descriptions in markdown files and use `--description-file`
+  - Tables, task lists `[]`/`[x]`, code blocks with syntax highlighting
+  - Headings, bold, italic, strikethrough, links, images
+  - Automatic conversion to Atlassian Document Format (ADF)
 - **🔐 Authentication**: Secure API token authentication with connection testing
 - **📊 Rich Output**: Enhanced tables, detailed views, JSON output, and beautiful formatting
 - **⚡ Quick Commands**: Shortcuts for common operations (my-issues, epics, subtasks, search)
@@ -613,77 +617,141 @@ jira-cli search "project = <project_id> AND duedate <= '2025-12-31' ORDER BY pri
 
 ## Markdown Support
 
-The Jira CLI now supports **full markdown parsing** for issue descriptions and comments, automatically converting them to Atlassian Document Format (ADF) for proper rendering in Jira.
+The Jira CLI now supports **comprehensive markdown parsing** for issue descriptions and comments, automatically converting them to Atlassian Document Format (ADF) for beautiful rendering in Jira.
 
-### Supported Markdown Elements
+### Supported Markdown Features
 
-- **Headings**: `# H1`, `## H2`, `### H3`, etc.
-- **Text Formatting**: `**bold**`, `*italic*`, `` `inline code` ``
-- **Lists**: 
-  - Unordered: `- item` or `* item`
-  - Ordered: `1. item`
-- **Links**: `[text](url)`
-- **Code Blocks**: 
-  ```
-  ```language
-  code here
-  ```
-  ```
+#### Text Formatting
+- **Bold**: `**text**` or `__text__`
+- *Italic*: `*text*` or `_text_`
+- ~~Strikethrough~~: `~~text~~`
+- `Inline code`: `` `code` ``
+- Combined: `**bold _and italic_**`
+
+#### Structure
+- **Headings**: `# H1` through `###### H6`
+- **Horizontal rules**: `---` or `***`
 - **Blockquotes**: `> quoted text`
-- **Horizontal Rules**: `---` or `***`
 
-### Usage Examples
+#### Lists
+- **Bullet lists**: `- item` or `* item`
+- **Numbered lists**: `1. item`, `2. item`
+- **Nested lists**: Indent with spaces for nesting
+- **Task lists**: `- [] todo` or `- [x] completed`
+
+#### Tables
+Full table support with headers and alignment:
+```markdown
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| Cell A   | Cell B   | Cell C   |
+| Cell D   | Cell E   | Cell F   |
+```
+
+#### Code
+- **Inline code**: `` `code` ``
+- **Code blocks** with syntax highlighting:
+  ````markdown
+  ```python
+  def hello():
+      print("Hello, World!")
+  ```
+  ````
+
+Supported languages: `python`, `javascript`, `java`, `bash`, `sql`, `json`, and many more!
+
+#### Links & Media
+- **Links**: `[text](url)`
+- **Images**: `![alt text](image-url)`
+
+### Using Markdown in Commands
+
+#### Create Issue with Markdown Description
 
 ```bash
-# Create issue with markdown description
+# From command line
 jira-cli issues create --project PROJ \
   --summary "Feature Implementation" \
   --type Story \
   --description "# Implementation Plan
 
-## Phase 1: Setup
-- Setup development environment
-- Create **base repository**
-- Install dependencies
+## Overview
+Implement **user authentication** with *multi-factor* support.
 
-## Phase 2: Development  
-- Implement core features
-- Add \`unit tests\`
-- Update [documentation](https://example.com)
+## Tasks
+- [] Design database schema
+- [] Implement backend API
+- [x] Create UI mockups
 
-### Code Example
-\`\`\`python
-def main():
-    print('Hello, World!')
+## Technical Stack
+| Component | Technology |
+|-----------|------------|
+| Backend   | Node.js    |
+| Frontend  | React      |
+| Database  | PostgreSQL |
+
+\`\`\`javascript
+// Authentication endpoint
+app.post('/auth', async (req, res) => {
+  // Implementation here
+});
 \`\`\`
 
-> **Note**: Remember to test thoroughly before deployment!"
+> **Important**: All endpoints must use HTTPS"
+```
 
-# Add markdown comment
+#### Create Issue from Markdown File
+
+```bash
+# Write markdown in your favorite editor
+vim feature.md
+
+# Create issue from file
+jira-cli issues create --project PROJ \
+  --summary "Feature Implementation" \
+  --type Story \
+  --description-file feature.md
+```
+
+#### Update Issue with Markdown File
+
+```bash
+# Update description from markdown file
+jira-cli issues update PROJ-123 --description-file changes.md
+
+# Update with inline markdown
+jira-cli issues update PROJ-123 \
+  --description "## Updated Requirements
+
+- [x] ~~Old requirement~~
+- [] New requirement
+- [] Additional feature
+
+See [documentation](https://docs.example.com)"
+```
+
+#### Add Markdown Comments
+
+```bash
 jira-cli issues comment PROJ-123 "## Status Update
 
-Progress on this issue:
+### Progress
 - [x] Backend API completed
-- [ ] Frontend integration *in progress*
-- [ ] Testing pending
+- [x] Frontend integration done
+- [] Testing in progress
 
-Next steps:
-1. Complete UI integration
-2. Run **full test suite**
-3. Deploy to staging
+### Next Steps
+1. Complete **integration tests**
+2. Deploy to *staging environment*
+3. Request QA review
 
 \`\`\`bash
-npm run build && npm run deploy
-\`\`\`"
+# Deploy command
+npm run build && npm run deploy:staging
+\`\`\`
 
-# Disable markdown parsing (treat as plain text)
-jira-cli issues create --project PROJ \
-  --summary "Plain Text Issue" \
-  --description "This will be treated as plain text with **no** formatting" \
-  --no-markdown
-
-# Comment without markdown
-jira-cli issues comment PROJ-123 "Plain text comment" --no-markdown
+**Blockers**: None
+**ETA**: End of week"
 ```
 
 ### Epic, Story, and Sub-task Workflows with Markdown
