@@ -974,6 +974,22 @@ jira-cli auth --help
 jira-cli search --help
 ```
 
+### For Claude Code / AI Agent Users
+
+If you're using Claude Code or another AI coding assistant, see **[jira-agent.md](jira-agent.md)** for:
+- Quick reference guide optimized for AI agents
+- Markdown file workflow examples
+- Complete issue creation workflows
+- Best practices for programmatic usage
+- Troubleshooting tips
+
+### Documentation Files
+
+- **[README.md](README.md)** - Main documentation (you are here)
+- **[MARKDOWN_SUPPORT.md](MARKDOWN_SUPPORT.md)** - Comprehensive markdown feature guide
+- **[jira-agent.md](jira-agent.md)** - AI agent / Claude Code guide
+- **[CLAUDE.md](CLAUDE.md)** - Development and architecture guide
+
 ## Development
 
 ### Project Structure
