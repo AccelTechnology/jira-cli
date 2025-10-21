@@ -338,6 +338,87 @@ def format_users_table(users: List[Dict[str, Any]]) -> Table:
     return table
 
 
+def format_versions_table(versions: List[Dict[str, Any]]) -> Table:
+    """Format project versions as a table."""
+    table = Table(title="Project Versions")
+
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Name", style="white")
+    table.add_column("Released", style="green")
+    table.add_column("Release Date", style="blue", no_wrap=True)
+    table.add_column("Description", style="yellow")
+
+    for version in versions:
+        version_id = version.get("id", "N/A")
+        name = version.get("name", "N/A")
+        released = "Yes" if version.get("released", False) else "No"
+        release_date = version.get("releaseDate", "N/A")
+        description = version.get("description", "")[:50] + (
+            "..." if len(version.get("description", "")) > 50 else ""
+        )
+
+        table.add_row(version_id, name, released, release_date, description)
+
+    return table
+
+
+def format_components_table(components: List[Dict[str, Any]]) -> Table:
+    """Format project components as a table."""
+    table = Table(title="Project Components")
+
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Name", style="white")
+    table.add_column("Lead", style="green")
+    table.add_column("Description", style="yellow")
+
+    for component in components:
+        component_id = component.get("id", "N/A")
+        name = component.get("name", "N/A")
+        lead = (
+            component.get("lead", {}).get("displayName", "Unassigned")
+            if component.get("lead")
+            else "Unassigned"
+        )
+        description = component.get("description", "")[:50] + (
+            "..." if len(component.get("description", "")) > 50 else ""
+        )
+
+        table.add_row(component_id, name, lead, description)
+
+    return table
+
+
+def format_project_detail(project: Dict[str, Any]) -> Panel:
+    """Format project details as a panel."""
+    key = project.get("key", "N/A")
+    name = project.get("name", "N/A")
+    project_type = project.get("projectTypeKey", "N/A")
+    description = project.get("description", "No description")
+
+    # Get lead information
+    lead = "N/A"
+    if project.get("lead"):
+        lead = project["lead"].get("displayName", "N/A")
+
+    # Get project URL if available
+    project_url = project.get("self", "")
+    if project_url:
+        # Extract base URL and create browse URL
+        base_url = "/".join(project_url.split("/")[:3])
+        browse_url = f"{base_url}/browse/{key}"
+    else:
+        browse_url = "N/A"
+
+    content = f"""[bold]Name:[/bold] {name}
+[bold]Key:[/bold] {key}
+[bold]Type:[/bold] {project_type}
+[bold]Lead:[/bold] {lead}
+[bold]Description:[/bold] {description}
+[bold]URL:[/bold] [link={browse_url}]{browse_url}[/link]"""
+
+    return Panel(content, title=f"Project: {key}", title_align="left")
+
+
 def print_yaml(data: Any) -> None:
     """Print data as formatted YAML."""
     try:

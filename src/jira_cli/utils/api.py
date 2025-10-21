@@ -489,7 +489,18 @@ class JiraApiClient:
             Search results containing subtasks
         """
         jql = f"parent = {parent_issue_key}"
-        return self.search_issues(jql)
+        fields = [
+            "summary",
+            "issuetype",
+            "status",
+            "assignee",
+            "reporter",
+            "priority",
+            "duedate",
+            "created",
+            "updated",
+        ]
+        return self.search_issues(jql, fields)
 
     def create_subtask(
         self, parent_issue_key: str, subtask_data: Dict[str, Any]

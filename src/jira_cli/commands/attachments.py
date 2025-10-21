@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
 from pathlib import Path
 
 from ..utils.api import JiraApiClient
@@ -65,11 +66,39 @@ def format_attachments_table(attachments: list) -> Table:
     return table
 
 
+def format_attachment_detail(attachment: dict) -> Panel:
+    """Format attachment details as a panel."""
+    from datetime import datetime
+
+    attachment_id = attachment.get("id", "Unknown")
+    filename = attachment.get("filename", "Unknown")
+    size = format_size(attachment.get("size", 0))
+    author = attachment.get("author", {}).get("displayName", "Unknown")
+    created = attachment.get("created", "")
+    mime_type = attachment.get("mimeType", "Unknown")
+
+    # Format date
+    if created:
+        try:
+            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+            created = dt.strftime("%Y-%m-%d %H:%M")
+        except:
+            pass
+
+    content = f"""[bold]Filename:[/bold] {filename}
+[bold]ID:[/bold] {attachment_id}
+[bold]Size:[/bold] {size}
+[bold]MIME Type:[/bold] {mime_type}
+[bold]Author:[/bold] {author}
+[bold]Created:[/bold] {created}"""
+
+    return Panel(content, title="Attachment Details", title_align="left")
+
+
 @app.command("list")
 def list_attachments(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
-    table: bool = typer.Option(False, "--table", help="Output as table"),
 ):
     """List attachments for an issue."""
     try:
@@ -80,14 +109,11 @@ def list_attachments(
 
         if json_output:
             print_json(attachments)
-        elif table:
-            attachments_table = format_attachments_table(attachments)
-            console.print(attachments_table)
         else:
             console.print(f"[bold blue]Attachments for {issue_key}:[/bold blue]")
 
             if not attachments:
-                console.print("  No attachments found")
+                print_info("No attachments found")
                 return
 
             total_size = 0
@@ -274,30 +300,8 @@ def get_attachment_info(
         if json_output:
             print_json(attachment)
         else:
-            console.print(f"[bold blue]Attachment Details:[/bold blue]")
-
-            filename = attachment.get("filename", "Unknown")
-            size = format_size(attachment.get("size", 0))
-            author = attachment.get("author", {}).get("displayName", "Unknown")
-            created = attachment.get("created", "")
-            mime_type = attachment.get("mimeType", "Unknown")
-
-            # Format date
-            if created:
-                try:
-                    from datetime import datetime
-
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    created = dt.strftime("%Y-%m-%d %H:%M")
-                except:
-                    pass
-
-            console.print(f"  [dim]ID:[/dim] {attachment_id}")
-            console.print(f"  [cyan]Filename:[/cyan] {filename}")
-            console.print(f"  [green]Size:[/green] {size}")
-            console.print(f"  [blue]Author:[/blue] {author}")
-            console.print(f"  [white]Created:[/white] {created}")
-            console.print(f"  [yellow]MIME Type:[/yellow] {mime_type}")
+            attachment_panel = format_attachment_detail(attachment)
+            console.print(attachment_panel)
 
     except JiraCliError as e:
         print_error(f"Failed to get attachment info: {e}")
