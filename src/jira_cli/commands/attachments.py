@@ -287,6 +287,155 @@ def delete_attachment(
         raise typer.Exit(1)
 
 
+@app.command("delete-all")
+def delete_all_attachments(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Only delete attachments matching this pattern"),
+):
+    """Delete all attachments from an issue."""
+    try:
+        client = JiraApiClient()
+
+        # Get all attachments for the issue
+        issue = client.get_issue(issue_key, fields=["attachment"])
+        attachments = issue.get("fields", {}).get("attachment", [])
+
+        if not attachments:
+            print_info(f"No attachments found on {issue_key}")
+            return
+
+        # Filter by pattern if provided
+        if pattern:
+            import re
+            filtered = [a for a in attachments if re.search(pattern, a.get("filename", ""))]
+            if not filtered:
+                print_info(f"No attachments matching pattern '{pattern}' found on {issue_key}")
+                return
+            attachments = filtered
+            print_info(f"Found {len(attachments)} attachment(s) matching pattern '{pattern}'")
+        else:
+            print_info(f"Found {len(attachments)} attachment(s) on {issue_key}")
+
+        # Show what will be deleted
+        console.print("\n[bold]Attachments to delete:[/bold]")
+        for att in attachments:
+            filename = att.get("filename", "Unknown")
+            size = format_size(att.get("size", 0))
+            console.print(f"  • {filename} ({size})")
+
+        if not yes:
+            if not typer.confirm(f"\nDelete {len(attachments)} attachment(s)?"):
+                print_info("Cancelled")
+                return
+
+        # Delete attachments
+        deleted = 0
+        failed = 0
+        for att in attachments:
+            try:
+                attachment_id = att.get("id")
+                filename = att.get("filename", "Unknown")
+                client.delete_attachment(attachment_id)
+                console.print(f"  ✓ Deleted: {filename}")
+                deleted += 1
+            except Exception as e:
+                console.print(f"  ✗ Failed: {filename} - {e}")
+                failed += 1
+
+        print_success(f"Deleted {deleted} attachment(s)")
+        if failed > 0:
+            print_error(f"Failed to delete {failed} attachment(s)")
+
+    except JiraCliError as e:
+        print_error(f"Failed to delete attachments: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("delete-duplicates")
+def delete_duplicate_attachments(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    keep: str = typer.Option("latest", "--keep", help="Which to keep: 'latest' or 'oldest'"),
+):
+    """Delete duplicate attachments from an issue (same filename)."""
+    try:
+        client = JiraApiClient()
+
+        # Get all attachments for the issue
+        issue = client.get_issue(issue_key, fields=["attachment"])
+        attachments = issue.get("fields", {}).get("attachment", [])
+
+        if not attachments:
+            print_info(f"No attachments found on {issue_key}")
+            return
+
+        # Group by filename
+        from collections import defaultdict
+        from datetime import datetime
+
+        filename_groups = defaultdict(list)
+        for att in attachments:
+            filename = att.get("filename", "")
+            filename_groups[filename].append(att)
+
+        # Find duplicates
+        duplicates = {k: v for k, v in filename_groups.items() if len(v) > 1}
+
+        if not duplicates:
+            print_info(f"No duplicate attachments found on {issue_key}")
+            return
+
+        print_info(f"Found {len(duplicates)} file(s) with duplicates:")
+
+        to_delete = []
+        for filename, atts in duplicates.items():
+            console.print(f"\n[bold cyan]{filename}[/bold cyan] ({len(atts)} copies)")
+
+            # Sort by created date
+            sorted_atts = sorted(atts, key=lambda a: a.get("created", ""))
+
+            # Determine which to keep
+            if keep == "latest":
+                keep_att = sorted_atts[-1]
+                delete_atts = sorted_atts[:-1]
+            else:  # oldest
+                keep_att = sorted_atts[0]
+                delete_atts = sorted_atts[1:]
+
+            console.print(f"  Keep: {keep_att.get('created', 'Unknown')} (ID: {keep_att.get('id')})")
+            for att in delete_atts:
+                console.print(f"  Delete: {att.get('created', 'Unknown')} (ID: {att.get('id')})")
+                to_delete.append(att)
+
+        if not yes:
+            if not typer.confirm(f"\nDelete {len(to_delete)} duplicate attachment(s)?"):
+                print_info("Cancelled")
+                return
+
+        # Delete duplicates
+        deleted = 0
+        failed = 0
+        for att in to_delete:
+            try:
+                attachment_id = att.get("id")
+                filename = att.get("filename", "Unknown")
+                client.delete_attachment(attachment_id)
+                console.print(f"  ✓ Deleted: {filename} ({att.get('created', 'Unknown')})")
+                deleted += 1
+            except Exception as e:
+                console.print(f"  ✗ Failed: {filename} - {e}")
+                failed += 1
+
+        print_success(f"Deleted {deleted} duplicate attachment(s)")
+        if failed > 0:
+            print_error(f"Failed to delete {failed} attachment(s)")
+
+    except JiraCliError as e:
+        print_error(f"Failed to delete duplicates: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("info")
 def get_attachment_info(
     attachment_id: str = typer.Argument(..., help="Attachment ID"),

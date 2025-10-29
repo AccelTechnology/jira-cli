@@ -836,21 +836,32 @@ class JiraApiClient:
 
         url = f"{self.base_url}/rest/api/3/issue/{issue_key}/attachments"
 
-        # Special headers required for attachments
-        headers = self.headers.copy()
-        headers["X-Atlassian-Token"] = "no-check"
-        del headers["Content-Type"]  # Let requests set this for multipart
+        # Temporarily remove Content-Type from session headers
+        # It must not be set for multipart/form-data uploads (requests sets it automatically)
+        original_content_type = self.session.headers.pop("Content-Type", None)
 
-        with open(file_path, "rb") as f:
-            files = {
-                "file": (os.path.basename(file_path), f, "application/octet-stream")
+        try:
+            # Special headers required for attachments
+            headers = {
+                "X-Atlassian-Token": "no-check",
+                "Authorization": self.headers["Authorization"],
+                "Accept": self.headers["Accept"]
             }
-            response = self.session.post(url, files=files, headers=headers)
 
-        if response.status_code not in [200, 201]:
-            raise JiraApiError(f"Upload failed: {response.status_code} {response.text}")
+            with open(file_path, "rb") as f:
+                files = {
+                    "file": (os.path.basename(file_path), f)
+                }
+                response = self.session.post(url, files=files, headers=headers)
 
-        return response.json()
+            if response.status_code not in [200, 201]:
+                raise JiraApiError(f"Upload failed: {response.status_code} {response.text}")
+
+            return response.json()
+        finally:
+            # Restore original Content-Type header
+            if original_content_type:
+                self.session.headers["Content-Type"] = original_content_type
 
     def delete_attachment(self, attachment_id: str) -> Dict[str, Any]:
         """Delete an attachment.
