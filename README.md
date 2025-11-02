@@ -17,9 +17,9 @@ A comprehensive command-line interface for Jira REST API operations, built with 
   - Headings, bold, italic, strikethrough, links, images
   - Automatic conversion to Atlassian Document Format (ADF)
 - **🔐 Authentication**: Secure API token authentication with connection testing
-- **📊 Rich Output**: Enhanced tables, detailed views, JSON output, and beautiful formatting
+- **📊 Rich Output**: Enhanced tables, detailed panels, and beautiful formatting using the Rich library
 - **⚡ Quick Commands**: Shortcuts for common operations (my-issues, epics, subtasks, search)
-- **🎨 Multiple Output Formats**: JSON, table, and detailed panel views
+- **🎨 Consistent Formatting**: Tables for lists, panels for details, with color-coded fields
 
 ## Installation
 
@@ -288,8 +288,7 @@ jira-cli auth whoami
 
 ```bash
 # Quick search (shortcut command)
-jira-cli search "project = <project_id> AND assignee = currentUser()" --table
-
+jira-cli search "project = <project_id> AND assignee = currentUser()"
 # Advanced search with options
 jira-cli issues search "project = <project_id>" --table --max-results 100
 
@@ -352,8 +351,7 @@ jira-cli issues assign <project_id>-123 user_account_id
 jira-cli issues assign <project_id>-123 none
 
 # Get available transitions
-jira-cli issues transitions <project_id>-123 --table
-
+jira-cli issues transitions <project_id>-123
 # Transition issue
 jira-cli issues transition <project_id>-123 transition_id
 
@@ -386,11 +384,9 @@ jira-cli issues delete <project_id>-123 --force
 jira-cli issues create --project <project_id> --summary "New Epic" --type Epic
 
 # List all epics in project
-jira-cli epics --project <project_id> --table
-
+jira-cli epics --project <project_id>
 # List stories under an epic
-jira-cli issues epic-stories <project_id>-1 --table
-
+jira-cli issues epic-stories <project_id>-1
 # Create story under epic
 jira-cli issues create \
   --project <project_id> \
@@ -403,11 +399,9 @@ jira-cli issues create \
 
 ```bash
 # List subtasks of a parent issue (quick command)
-jira-cli subtasks <project_id>-123 --table
-
+jira-cli subtasks <project_id>-123
 # List subtasks (detailed command)
-jira-cli issues subtasks <project_id>-123 --table
-
+jira-cli issues subtasks <project_id>-123
 # Create subtask under a parent issue
 jira-cli issues create-subtask \
   --parent <project_id>-123 \
@@ -444,14 +438,11 @@ jira-cli issues create \
   --due-date "2025-09-15"
 
 # View project timeline (sorted by due date)
-jira-cli search "project = <project_id> ORDER BY duedate ASC" --table
-
+jira-cli search "project = <project_id> ORDER BY duedate ASC"
 # Find overdue issues
-jira-cli search "project = <project_id> AND duedate < now()" --table
-
+jira-cli search "project = <project_id> AND duedate < now()"
 # Find issues due this week
-jira-cli search "project = <project_id> AND duedate >= startOfWeek() AND duedate <= endOfWeek()" --table
-
+jira-cli search "project = <project_id> AND duedate >= startOfWeek() AND duedate <= endOfWeek()"
 # Update issue due date
 jira-cli issues update <project_id>-123 --due-date "2025-10-01"
 ```
@@ -460,35 +451,29 @@ jira-cli issues update <project_id>-123 --due-date "2025-10-01"
 
 ```bash
 # List your assigned issues
-jira-cli my-issues --project <project_id> --table
-
+jira-cli my-issues --project <project_id>
 # List your issues with status filter
-jira-cli my-issues --project <project_id> --status "In Progress" --table
-
+jira-cli my-issues --project <project_id> --status "In Progress"
 # List your open issues
-jira-cli my-issues --project <project_id> --status "open" --table
-
+jira-cli my-issues --project <project_id> --status "open"
 # List all epics
-jira-cli epics --project <project_id> --table
-
+jira-cli epics --project <project_id>
 # List subtasks of an issue
-jira-cli subtasks <project_id>-123 --table
-
+jira-cli subtasks <project_id>-123
 # Quick search
-jira-cli search "assignee = currentUser()" --table
-```
+jira-cli search "assignee = currentUser()"```
 
 ### Project Operations
 
 ```bash
 # List all projects
-jira-cli projects list --table
+jira-cli projects list
 
 # Get project details
-jira-cli projects get <project_id> --json
+jira-cli projects get <project_id>
 
 # List all issue types
-jira-cli projects issue-types --table
+jira-cli projects issue-types
 
 # List project versions
 jira-cli projects versions <project_id>
@@ -505,23 +490,17 @@ jira-cli auth test
 
 # Show current user info
 jira-cli auth whoami
-
-# Get detailed user info
-jira-cli auth whoami --json
 ```
 
 ### User Management & Mentions
 
 ```bash
 # Search for users
-jira-cli issues search-users "john" --table
-
+jira-cli issues search-users "john"
 # Search users by email
-jira-cli issues search-users "john.doe@company.com" --table
-
+jira-cli issues search-users "john.doe@company.com"
 # Get user account IDs for mentions
-jira-cli issues search-users "jane" --max-results 5 --table
-```
+jira-cli issues search-users "jane" --max-results 5```
 
 ## Smart @Mention Support
 
@@ -569,51 +548,39 @@ jira-cli issues comment PROJ-123 "Email me @john@company.com" --no-parse-mention
 
 ## Output Formats
 
-The CLI supports three output formats:
+All commands output beautifully formatted data using the Rich library:
 
-- **JSON** (default): Raw JSON response from Jira API (`--json`)
-- **Table**: Formatted table view (`--table`)
-- **Detail**: Rich formatted panel view for single items (`--detail`)
+- **Tables**: For list operations (issues, projects, worklogs, etc.) showing key information in a structured format
+- **Detail Panels**: For single item views (individual issues, projects, users) with comprehensive information
+- **Consistent Styling**: Color-coded fields and consistent formatting across all commands
 
 ## Advanced JQL Queries
 
 ```bash
 # Issues assigned to you
-jira-cli search "assignee = currentUser()" --table
-
+jira-cli search "assignee = currentUser()"
 # Open issues in a project
-jira-cli search "project = <project_id> AND status != Done" --table
-
+jira-cli search "project = <project_id> AND status != Done"
 # High priority bugs
-jira-cli search "project = <project_id> AND priority = High AND issuetype = Bug" --table
-
+jira-cli search "project = <project_id> AND priority = High AND issuetype = Bug"
 # Recent updates (last week)
-jira-cli search "project = <project_id> AND updated >= -1w" --table
-
+jira-cli search "project = <project_id> AND updated >= -1w"
 # All epics in project
-jira-cli search "project = <project_id> AND issuetype = Epic" --table
-
+jira-cli search "project = <project_id> AND issuetype = Epic"
 # Stories under specific epic
-jira-cli search "project = <project_id> AND parent = <project_id>-1" --table
-
+jira-cli search "project = <project_id> AND parent = <project_id>-1"
 # Stories without epic assignment
-jira-cli search "project = <project_id> AND issuetype = Story AND parent is EMPTY" --table
-
+jira-cli search "project = <project_id> AND issuetype = Story AND parent is EMPTY"
 # All subtasks in project
-jira-cli search "project = <project_id> AND issuetype = Sub-task" --table
-
+jira-cli search "project = <project_id> AND issuetype = Sub-task"
 # Subtasks under specific parent
-jira-cli search "project = <project_id> AND parent = <project_id>-123" --table
-
+jira-cli search "project = <project_id> AND parent = <project_id>-123"
 # Issues without subtasks
-jira-cli search "project = <project_id> AND issueFunction in subtasksOf('none')" --table
-
+jira-cli search "project = <project_id> AND issueFunction in subtasksOf('none')"
 # Issues by type with enhanced table view
-jira-cli search "project = <project_id> AND issuetype in (Epic, Story, Task, Sub-task)" --table
-
+jira-cli search "project = <project_id> AND issuetype in (Epic, Story, Task, Sub-task)"
 # Complex timeline queries
-jira-cli search "project = <project_id> AND duedate <= '2025-12-31' ORDER BY priority DESC, duedate ASC" --table
-```
+jira-cli search "project = <project_id> AND duedate <= '2025-12-31' ORDER BY priority DESC, duedate ASC"```
 
 ## Markdown Support
 
@@ -896,8 +863,7 @@ The CLI provides clear error messages for:
 ### Daily Workflow
 ```bash
 # Check your assigned work
-jira-cli my-issues --table
-
+jira-cli my-issues
 # Create a new task
 jira-cli issues create --project <project_id> --summary "Daily standup notes" --type Task
 
@@ -919,8 +885,7 @@ jira-cli issues create --project <project_id> --summary "User Login" --type Stor
 jira-cli issues create --project <project_id> --summary "User Registration" --type Story --epic <project_id>-1
 
 # Review epic progress
-jira-cli issues epic-stories <project_id>-1 --table
-```
+jira-cli issues epic-stories <project_id>-1```
 
 ### Subtask Management
 ```bash
@@ -934,8 +899,7 @@ jira-cli issues create-subtask --parent <project_id>-5 --summary "Add frontend v
 jira-cli issues create-subtask --parent <project_id>-5 --summary "Write unit tests" --assignee "user4_id"
 
 # Review subtask progress
-jira-cli subtasks <project_id>-5 --table
-
+jira-cli subtasks <project_id>-5
 # Convert existing issue to subtask
 jira-cli issues link-subtask <project_id>-10 <project_id>-5
 
@@ -946,14 +910,11 @@ jira-cli issues comment <project_id>-6 "Subtask completed. @team-lead@company.co
 ### Project Planning
 ```bash
 # List all epics for planning
-jira-cli epics --project <project_id> --table
-
+jira-cli epics --project <project_id>
 # Review project timeline
-jira-cli search "project = <project_id> ORDER BY duedate ASC" --table
-
+jira-cli search "project = <project_id> ORDER BY duedate ASC"
 # Find work without deadlines
-jira-cli search "project = <project_id> AND duedate is EMPTY" --table
-```
+jira-cli search "project = <project_id> AND duedate is EMPTY"```
 
 ## Getting Help
 

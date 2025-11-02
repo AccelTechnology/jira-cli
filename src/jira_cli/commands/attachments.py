@@ -10,7 +10,7 @@ from rich.panel import Panel
 from pathlib import Path
 
 from ..utils.api import JiraApiClient
-from ..utils.formatting import print_json, print_error, print_success, print_info
+from ..utils.formatting import print_error, print_success, print_info
 from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
@@ -98,7 +98,6 @@ def format_attachment_detail(attachment: dict) -> Panel:
 @app.command("list")
 def list_attachments(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """List attachments for an issue."""
     try:
@@ -107,45 +106,42 @@ def list_attachments(
 
         attachments = issue.get("fields", {}).get("attachment", [])
 
-        if json_output:
-            print_json(attachments)
-        else:
-            console.print(f"[bold blue]Attachments for {issue_key}:[/bold blue]")
+        console.print(f"[bold blue]Attachments for {issue_key}:[/bold blue]")
 
-            if not attachments:
-                print_info("No attachments found")
-                return
+        if not attachments:
+            print_info("No attachments found")
+            return
 
-            total_size = 0
-            for attachment in attachments:
-                filename = attachment.get("filename", "Unknown")
-                size_bytes = attachment.get("size", 0)
-                size = format_size(size_bytes)
-                author = attachment.get("author", {}).get("displayName", "Unknown")
-                created = attachment.get("created", "")
-                attachment_id = attachment.get("id", "")
+        total_size = 0
+        for attachment in attachments:
+            filename = attachment.get("filename", "Unknown")
+            size_bytes = attachment.get("size", 0)
+            size = format_size(size_bytes)
+            author = attachment.get("author", {}).get("displayName", "Unknown")
+            created = attachment.get("created", "")
+            attachment_id = attachment.get("id", "")
 
-                # Format date
-                if created:
-                    try:
-                        from datetime import datetime
+            # Format date
+            if created:
+                try:
+                    from datetime import datetime
 
-                        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                        created = dt.strftime("%Y-%m-%d %H:%M")
-                    except:
-                        pass
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    created = dt.strftime("%Y-%m-%d %H:%M")
+                except:
+                    pass
 
-                console.print(f"\n  [dim]ID:[/dim] {attachment_id}")
-                console.print(f"  [cyan]Filename:[/cyan] {filename}")
-                console.print(f"  [green]Size:[/green] {size}")
-                console.print(f"  [blue]Author:[/blue] {author}")
-                console.print(f"  [white]Created:[/white] {created}")
+            console.print(f"\n  [dim]ID:[/dim] {attachment_id}")
+            console.print(f"  [cyan]Filename:[/cyan] {filename}")
+            console.print(f"  [green]Size:[/green] {size}")
+            console.print(f"  [blue]Author:[/blue] {author}")
+            console.print(f"  [white]Created:[/white] {created}")
 
-                total_size += size_bytes
+            total_size += size_bytes
 
-            # Display total size
-            if total_size > 0:
-                console.print(f"\n[bold]Total size: {format_size(total_size)}[/bold]")
+        # Display total size
+        if total_size > 0:
+            console.print(f"\n[bold]Total size: {format_size(total_size)}[/bold]")
 
     except JiraCliError as e:
         print_error(f"Failed to get attachments: {e}")
@@ -157,7 +153,6 @@ def list_attachments(
 def upload_attachment(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
     file_path: str = typer.Argument(..., help="Path to file to upload"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Upload an attachment to an issue."""
     if not os.path.exists(file_path):
@@ -191,20 +186,17 @@ def upload_attachment(
 
         result = client.upload_attachment(issue_key, file_path)
 
-        if json_output:
-            print_json(result)
+        if result:
+            attachment = result[0]
+            filename = attachment.get("filename", "Unknown")
+            size = format_size(attachment.get("size", 0))
+            print_success(
+                f"Successfully uploaded {filename} ({size}) to {issue_key}"
+            )
         else:
-            if result:
-                attachment = result[0]
-                filename = attachment.get("filename", "Unknown")
-                size = format_size(attachment.get("size", 0))
-                print_success(
-                    f"Successfully uploaded {filename} ({size}) to {issue_key}"
-                )
-            else:
-                print_success(
-                    f"Successfully uploaded {os.path.basename(file_path)} to {issue_key}"
-                )
+            print_success(
+                f"Successfully uploaded {os.path.basename(file_path)} to {issue_key}"
+            )
 
     except JiraCliError as e:
         print_error(f"Failed to upload attachment: {e}")
@@ -439,18 +431,14 @@ def delete_duplicate_attachments(
 @app.command("info")
 def get_attachment_info(
     attachment_id: str = typer.Argument(..., help="Attachment ID"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Get detailed information about an attachment."""
     try:
         client = JiraApiClient()
         attachment = client.get_attachment(attachment_id)
 
-        if json_output:
-            print_json(attachment)
-        else:
-            attachment_panel = format_attachment_detail(attachment)
-            console.print(attachment_panel)
+        attachment_panel = format_attachment_detail(attachment)
+        console.print(attachment_panel)
 
     except JiraCliError as e:
         print_error(f"Failed to get attachment info: {e}")

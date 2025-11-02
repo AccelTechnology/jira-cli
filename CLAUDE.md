@@ -65,7 +65,7 @@ src/jira_cli/
 ├── utils/               # Shared utilities and helpers
 │   ├── api.py          # Jira REST API client
 │   ├── auth.py         # Authentication helpers
-│   ├── formatting.py   # Output formatting (tables, JSON, rich panels)
+│   ├── formatting.py   # Output formatting (tables and rich panels)
 │   ├── validation.py   # Input validation decorators
 │   ├── error_handling.py # Enhanced error messaging system
 │   └── markdown_to_adf.py # Markdown to Atlassian Document Format
@@ -80,7 +80,7 @@ src/jira_cli/
 - Uses Typer for CLI framework with rich output support
 - Commands are organized into domain-specific modules (issues, projects, etc.)
 - Each command module has its own Typer app that gets added to main app
-- All commands support multiple output formats: JSON (default), table, and detail views
+- All commands use rich formatted output (tables and detail panels)
 
 #### Error Handling System
 - Comprehensive validation system using decorators (`@validate_command`)
@@ -95,7 +95,7 @@ src/jira_cli/
 - Built-in retry logic and rate limiting handling
 
 #### Output Formatting
-- Three output modes: JSON, table (rich tables), and detail (rich panels)
+- Rich formatted output using tables and detail panels
 - Markdown support with conversion to Atlassian Document Format (ADF)
 - Smart @mention parsing in comments with user lookup
 - Consistent formatting across all commands
@@ -122,10 +122,11 @@ src/jira_cli/
 - Username mentions (@username)
 - Markdown support in comments and descriptions
 
-#### Output Flexibility
-- `--json`: Raw Jira API responses
-- `--table`: Formatted tables with key columns (Key, Summary, Type, Status, etc.)
-- `--detail`: Rich formatted panels for single items
+#### Output Formatting
+- All commands output rich formatted data using the Rich library
+- Table views for list operations (issues, projects, worklogs, etc.)
+- Detail panels for single item views (individual issues, projects, users)
+- Consistent styling across all commands with color-coded fields
 
 ### Environment Configuration
 Required environment variables:
@@ -152,7 +153,7 @@ JIRA_URL="https://your-domain.atlassian.net"  # Optional
 1. Create command function in appropriate module (e.g., `commands/issues.py`)
 2. Add validation decorators (`@validate_command`)
 3. Use consistent error handling patterns
-4. Support multiple output formats
+4. Use rich formatted output (tables for lists, panels for details)
 5. Add comprehensive help text
 
 ### Error Handling Patterns

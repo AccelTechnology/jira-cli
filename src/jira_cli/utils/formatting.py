@@ -126,12 +126,6 @@ def _extract_text_from_adf(adf_content: Dict[str, Any]) -> str:
     return "".join(result_parts).strip() or "No description"
 
 
-def print_json(data: Any, indent: int = 2) -> None:
-    """Print data as formatted JSON."""
-    json_str = json.dumps(data, indent=indent, default=str, ensure_ascii=False)
-    console.print_json(json_str)
-
-
 def print_success(message: str) -> None:
     """Print success message."""
     console.print(f"[green]✓[/green] {message}")

@@ -8,7 +8,7 @@ from rich.table import Table
 from datetime import datetime
 
 from ..utils.api import JiraApiClient
-from ..utils.formatting import print_json, print_error, print_success, print_info
+from ..utils.formatting import print_error, print_success, print_info
 from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
@@ -66,7 +66,6 @@ def list_worklogs(
     max_results: int = typer.Option(
         50, "--max-results", "-m", help="Maximum number of results"
     ),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
     table: bool = typer.Option(False, "--table", help="Output as table"),
 ):
     """List worklogs for an issue."""
@@ -74,9 +73,7 @@ def list_worklogs(
         client = JiraApiClient()
         result = client.get_worklogs(issue_key, max_results=max_results)
 
-        if json_output:
-            print_json(result)
-        elif table:
+        if table:
             worklogs_table = format_worklog_table(result.get("worklogs", []))
             console.print(worklogs_table)
         else:
@@ -150,7 +147,6 @@ def add_worklog(
     started: Optional[str] = typer.Option(
         None, "--started", "-s", help="Start time (YYYY-MM-DD HH:MM format)"
     ),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Add a worklog to an issue."""
     try:
@@ -186,12 +182,9 @@ def add_worklog(
 
         result = client.add_worklog(issue_key, time_spent, comment, started_iso)
 
-        if json_output:
-            print_json(result)
-        else:
-            print_success(f"Added {time_spent} worklog to {issue_key}")
-            if comment:
-                console.print(f"  Comment: {comment}")
+        print_success(f"Added {time_spent} worklog to {issue_key}")
+        if comment:
+            console.print(f"  Comment: {comment}")
 
     except JiraCliError as e:
         print_error(f"Failed to add worklog: {e}")
@@ -234,7 +227,6 @@ def update_worklog(
     started: Optional[str] = typer.Option(
         None, "--started", "-s", help="Start time (YYYY-MM-DD HH:MM format)"
     ),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Update a worklog."""
     if not any([time_spent, comment, started]):
@@ -275,10 +267,7 @@ def update_worklog(
             issue_key, worklog_id, time_spent, comment, started_iso
         )
 
-        if json_output:
-            print_json(result)
-        else:
-            print_success(f"Updated worklog {worklog_id} in {issue_key}")
+        print_success(f"Updated worklog {worklog_id} in {issue_key}")
 
     except JiraCliError as e:
         print_error(f"Failed to update worklog: {e}")

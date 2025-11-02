@@ -7,7 +7,6 @@ from rich.console import Console
 
 from ..utils.api import JiraApiClient
 from ..utils.formatting import (
-    print_json,
     print_error,
     print_success,
     print_info,
@@ -24,19 +23,14 @@ app = typer.Typer(help="Manage Jira projects")
 
 
 @app.command("list")
-def list_projects(
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
-):
+def list_projects():
     """List all projects."""
     try:
         client = JiraApiClient()
         projects = client.get_projects()
 
-        if json_output:
-            print_json(projects)
-        else:
-            projects_table = format_project_table(projects)
-            console.print(projects_table)
+        projects_table = format_project_table(projects)
+        console.print(projects_table)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -46,18 +40,14 @@ def list_projects(
 @app.command("get")
 def get_project(
     project_key: str = typer.Argument(..., help="Project key"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Get project details."""
     try:
         client = JiraApiClient()
         project = client.get(f"project/{project_key}")
 
-        if json_output:
-            print_json(project)
-        else:
-            project_panel = format_project_detail(project)
-            console.print(project_panel)
+        project_panel = format_project_detail(project)
+        console.print(project_panel)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -72,7 +62,6 @@ def list_issue_types(
         "-p",
         help="Project key (optional - shows project-specific types)",
     ),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """List issue types. Optionally specify a project to see project-specific types."""
     try:
@@ -104,11 +93,8 @@ def list_issue_types(
                 "Global issue types (use --project to see project-specific types):"
             )
 
-        if json_output:
-            print_json(issue_types)
-        else:
-            types_table = format_issue_types_table(issue_types)
-            console.print(types_table)
+        types_table = format_issue_types_table(issue_types)
+        console.print(types_table)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -118,22 +104,18 @@ def list_issue_types(
 @app.command("versions")
 def list_versions(
     project_key: str = typer.Argument(..., help="Project key"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """List project versions."""
     try:
         client = JiraApiClient()
         result = client.get(f"project/{project_key}/version")
 
-        if json_output:
-            print_json(result)
+        versions = result.get("values", [])
+        if versions:
+            versions_table = format_versions_table(versions)
+            console.print(versions_table)
         else:
-            versions = result.get("values", [])
-            if versions:
-                versions_table = format_versions_table(versions)
-                console.print(versions_table)
-            else:
-                print_info(f"No versions found for project {project_key}")
+            print_info(f"No versions found for project {project_key}")
 
     except JiraCliError as e:
         print_error(str(e))
@@ -143,22 +125,18 @@ def list_versions(
 @app.command("components")
 def list_components(
     project_key: str = typer.Argument(..., help="Project key"),
-    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """List project components."""
     try:
         client = JiraApiClient()
         result = client.get(f"project/{project_key}/component")
 
-        if json_output:
-            print_json(result)
+        components = result.get("values", [])
+        if components:
+            components_table = format_components_table(components)
+            console.print(components_table)
         else:
-            components = result.get("values", [])
-            if components:
-                components_table = format_components_table(components)
-                console.print(components_table)
-            else:
-                print_info(f"No components found for project {project_key}")
+            print_info(f"No components found for project {project_key}")
 
     except JiraCliError as e:
         print_error(str(e))
