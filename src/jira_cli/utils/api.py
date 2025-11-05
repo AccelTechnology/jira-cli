@@ -519,6 +519,31 @@ class JiraApiClient:
 
         return self.post(f"issue/{issue_key}/comment", {"body": adf_body})
 
+    def get_comments(
+        self,
+        issue_key: str,
+        start_at: int = 0,
+        max_results: int = 50,
+        order_by: str = "created",
+    ) -> Dict[str, Any]:
+        """Get comments for an issue.
+
+        Args:
+            issue_key: Issue key
+            start_at: Starting index for pagination
+            max_results: Maximum number of results to return
+            order_by: Sort order (created, -created for descending)
+
+        Returns:
+            Comments data with pagination info
+        """
+        params = {
+            "startAt": start_at,
+            "maxResults": max_results,
+            "orderBy": order_by,
+        }
+        return self.get(f"issue/{issue_key}/comment", params)
+
     def delete_issue(self, issue_key: str) -> Dict[str, Any]:
         """Delete an issue.
 

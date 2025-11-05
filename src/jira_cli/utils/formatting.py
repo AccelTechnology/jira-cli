@@ -413,6 +413,68 @@ def format_project_detail(project: Dict[str, Any]) -> Panel:
     return Panel(content, title=f"Project: {key}", title_align="left")
 
 
+def format_comments(comments: List[Dict[str, Any]], issue_key: str) -> None:
+    """Format and print comments for an issue.
+
+    Args:
+        comments: List of comment objects from Jira API
+        issue_key: The issue key these comments belong to
+    """
+    if not comments:
+        print_info(f"No comments found for {issue_key}")
+        return
+
+    console.print(f"\n[bold cyan]Comments for {issue_key}[/bold cyan] ({len(comments)} total)\n")
+
+    for idx, comment in enumerate(comments, 1):
+        author = comment.get("author", {})
+        author_name = author.get("displayName", "Unknown")
+        author_email = author.get("emailAddress", "")
+
+        created = comment.get("created", "N/A")
+        updated = comment.get("updated", "N/A")
+
+        # Format timestamps - extract date and time
+        created_display = created[:19].replace("T", " ") if created != "N/A" else "N/A"
+        updated_display = updated[:19].replace("T", " ") if updated != "N/A" else "N/A"
+
+        # Extract and format comment body
+        body_field = comment.get("body", {})
+        if isinstance(body_field, dict):
+            body = _extract_text_from_adf(body_field)
+        else:
+            body = str(body_field) if body_field else "No content"
+
+        # Build header with author and timestamp info
+        header_parts = [f"[bold]{author_name}[/bold]"]
+        if author_email:
+            header_parts.append(f"[dim]({author_email})[/dim]")
+
+        header = " ".join(header_parts)
+
+        # Build timestamp info
+        timestamp_info = f"[dim]Created: {created_display}"
+        if updated != created:
+            timestamp_info += f" | Updated: {updated_display}"
+        timestamp_info += "[/dim]"
+
+        # Create content with body
+        content = f"{header}\n{timestamp_info}\n\n{body}"
+
+        # Create panel for each comment
+        panel = Panel(
+            content,
+            title=f"Comment #{idx}",
+            title_align="left",
+            border_style="blue",
+        )
+        console.print(panel)
+
+        # Add spacing between comments (except after the last one)
+        if idx < len(comments):
+            console.print()
+
+
 def print_yaml(data: Any) -> None:
     """Print data as formatted YAML."""
     try:

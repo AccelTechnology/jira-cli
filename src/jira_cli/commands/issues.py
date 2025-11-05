@@ -445,6 +445,48 @@ def add_comment(
         raise typer.Exit(1)
 
 
+@app.command("comments")
+@validate_command(issue_key_params=["issue_key"], command_context="issues comments")
+def list_comments(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    max_results: int = typer.Option(
+        50, "--max-results", "-m", help="Maximum number of comments to retrieve"
+    ),
+    start_at: int = typer.Option(
+        0, "--start-at", "-s", help="Starting index for pagination"
+    ),
+    order_by: str = typer.Option(
+        "created",
+        "--order-by",
+        "-o",
+        help="Sort order: 'created' (oldest first) or '-created' (newest first)",
+    ),
+):
+    """List comments on an issue."""
+    try:
+        client = JiraApiClient()
+        result = client.get_comments(issue_key, start_at, max_results, order_by)
+
+        from ..utils.formatting import format_comments
+
+        comments = result.get("comments", [])
+        format_comments(comments, issue_key)
+
+        # Show pagination info if there are more comments
+        total = result.get("total", 0)
+        if total > len(comments):
+            remaining = total - (start_at + len(comments))
+            print_info(
+                f"\nShowing {len(comments)} of {total} comments. "
+                f"{remaining} more available. "
+                f"Use --start-at {start_at + max_results} to see more."
+            )
+
+    except JiraCliError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
 @app.command("epic-stories")
 def list_epic_stories(
     epic_key: str = typer.Argument(..., help="Epic issue key (e.g., PROJ-1)"),

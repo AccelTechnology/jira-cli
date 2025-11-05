@@ -121,6 +121,8 @@ jira-cli issues update PROJ-123 \
 
 ### 4. Comments
 
+#### Add Comments
+
 ```bash
 # Simple comment
 jira-cli issues comment PROJ-123 "Status update: work in progress"
@@ -136,6 +138,29 @@ jira-cli issues comment PROJ-123 "## Progress Update
 # Comment with mentions
 jira-cli issues comment PROJ-123 "@john.doe@company.com please review this"
 ```
+
+#### Fetch Comments
+
+```bash
+# List all comments on an issue (displays as formatted panels)
+jira-cli issues comments PROJ-123
+
+# Show newest comments first
+jira-cli issues comments PROJ-123 --order-by=-created
+
+# Limit results and use pagination
+jira-cli issues comments PROJ-123 --max-results 10 --start-at 0
+
+# View next page
+jira-cli issues comments PROJ-123 --max-results 10 --start-at 10
+```
+
+**Features:**
+- Rich formatted panels with author name and email
+- Markdown content rendered beautifully (code blocks, lists, formatting)
+- Created/Updated timestamps
+- Automatic pagination with helpful info
+- Sort by oldest first (default) or newest first (`--order-by=-created`)
 
 ### 5. Epic Management
 
@@ -448,6 +473,22 @@ jira-cli issues update PROJ-123 --description-file progress.md
 
 # 4. Add comment
 jira-cli issues comment PROJ-123 "Updated progress - 75% complete"
+
+# 5. Review all comments to see discussion history
+jira-cli issues comments PROJ-123 --order-by=-created
+```
+
+### Example 2b: Review Issue Discussion
+
+```bash
+# View all comments to understand context
+jira-cli issues comments PROJ-123
+
+# Check recent comments only
+jira-cli issues comments PROJ-123 --order-by=-created --max-results 5
+
+# Add your comment to the discussion
+jira-cli issues comment PROJ-123 "@team.lead@company.com Ready for review. See latest test results in comment above."
 ```
 
 ### Example 3: Create Technical Specification
@@ -524,6 +565,9 @@ jira-cli issues create \
 ```bash
 # Always get current state first
 jira-cli issues get PROJ-123 --detail
+
+# Review discussion history for context
+jira-cli issues comments PROJ-123
 ```
 
 ### 2. Use JSON Output for Parsing
@@ -538,6 +582,9 @@ jira-cli issues get PROJ-123 --json | jq '.fields.summary'
 ```bash
 # Find related issues
 jira-cli search "project = PROJ AND summary ~ 'authentication'" --table
+
+# Check recent comments to understand current discussion
+jira-cli issues comments PROJ-123 --order-by=-created --max-results 5
 ```
 
 ### 4. Validate Environment
@@ -606,6 +653,7 @@ jira-cli search "project = PROJ ORDER BY created DESC" --table --max-results 10
 | **Create issue** | `jira-cli issues create --project PROJ --summary "Title" --type Story --description-file desc.md` |
 | **Update issue** | `jira-cli issues update PROJ-123 --description-file update.md` |
 | **Add comment** | `jira-cli issues comment PROJ-123 "Message"` |
+| **List comments** | `jira-cli issues comments PROJ-123` |
 | **Get issue** | `jira-cli issues get PROJ-123 --detail` |
 | **Search issues** | `jira-cli search "JQL query" --table` |
 | **Create epic** | `jira-cli issues create --project PROJ --summary "Epic" --type Epic --description-file epic.md` |
