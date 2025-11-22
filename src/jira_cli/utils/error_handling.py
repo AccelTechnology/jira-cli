@@ -2,13 +2,8 @@
 
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from ..exceptions import JiraCliError, ValidationError
-
-console = Console()
 
 
 class ErrorFormatter:
@@ -38,27 +33,27 @@ class ErrorFormatter:
         Returns:
             Formatted error message string
         """
-        parts = [f"[bold red]Error: {error_type}[/bold red]", f"{description}"]
+        parts = [f"Error: {error_type}", f"{description}"]
 
         if received:
-            parts.append(f"\n[dim]Received:[/dim] {received}")
+            parts.append(f"\nReceived: {received}")
 
         if expected:
-            parts.append(f"[dim]Expected:[/dim] {expected}")
+            parts.append(f"Expected: {expected}")
 
         if examples:
-            parts.append(f"\n[bold]Example usage:[/bold]")
+            parts.append(f"\nExample usage:")
             for example in examples:
-                parts.append(f"  [cyan]{example}[/cyan]")
+                parts.append(f"  {example}")
 
         if suggestions:
-            parts.append(f"\n[bold]Suggestions:[/bold]")
+            parts.append(f"\nSuggestions:")
             for suggestion in suggestions:
-                parts.append(f"  • {suggestion}")
+                parts.append(f"  - {suggestion}")
 
         if command_context:
             parts.append(
-                f"\nRun '[cyan]jira-cli {command_context} --help[/cyan]' for more information."
+                f"\nRun 'jira-cli {command_context} --help' for more information."
             )
 
         return "\n".join(parts)
@@ -83,7 +78,7 @@ class ErrorFormatter:
             suggestions,
             command_context,
         )
-        console.print(message)
+        print(message)
 
 
 class InputValidator:
@@ -594,33 +589,27 @@ def validate_configuration() -> Tuple[bool, List[str]]:
 
 def print_configuration_help() -> None:
     """Print helpful configuration setup instructions."""
-    console.print(
-        Panel.fit(
-            """[bold]Jira CLI Configuration Setup[/bold]
+    print("""Jira CLI Configuration Setup
 
 To use Jira CLI, you need to set up these environment variables:
 
-[bold cyan]1. JIRA_URL[/bold cyan] - Your Jira instance URL
+1. JIRA_URL - Your Jira instance URL
    Example: export JIRA_URL='https://your-company.atlassian.net'
 
-[bold cyan]2. JIRA_EMAIL[/bold cyan] - Your Jira account email
+2. JIRA_EMAIL - Your Jira account email
    Example: export JIRA_EMAIL='your-email@company.com'
 
-[bold cyan]3. JIRA_API_TOKEN[/bold cyan] - Your Jira API token
+3. JIRA_API_TOKEN - Your Jira API token
    Example: export JIRA_API_TOKEN='your-api-token-here'
 
-[bold yellow]How to get an API token:[/bold yellow]
+How to get an API token:
 1. Go to https://id.atlassian.com/manage-profile/security/api-tokens
 2. Click "Create API token"
 3. Give it a label and copy the generated token
 
-[bold green]Test your setup:[/bold green]
+Test your setup:
 jira-cli auth test
 
-[bold blue]Quick start:[/bold blue]
+Quick start:
 jira-cli config  # View current configuration
-jira-cli my-issues  # List your assigned issues""",
-            title="Setup Help",
-            border_style="blue",
-        )
-    )
+jira-cli my-issues  # List your assigned issues""")

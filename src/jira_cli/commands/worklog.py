@@ -3,8 +3,6 @@
 import json
 from typing import Optional
 import typer
-from rich.console import Console
-from rich.table import Table
 from datetime import datetime
 
 from ..utils.api import JiraApiClient
@@ -13,19 +11,15 @@ from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
 
-console = Console()
 app = typer.Typer(help="Manage worklogs and time tracking")
 
 
-def format_worklog_table(worklogs: list) -> Table:
-    """Format worklogs data as a table."""
-    table = Table(title="Worklogs")
-    table.add_column("ID", style="dim")
-    table.add_column("Author", style="cyan")
-    table.add_column("Time Spent", style="green")
-    table.add_column("Started", style="blue")
-    table.add_column("Comment", style="white", max_width=50)
+def format_worklog_table(worklogs: list) -> str:
+    """Format worklogs data as plain text."""
+    if not worklogs:
+        return "No worklogs found."
 
+    lines = []
     for worklog in worklogs:
         author = worklog.get("author", {}).get("displayName", "Unknown")
         time_spent = worklog.get("timeSpent", "Unknown")
@@ -48,15 +42,9 @@ def format_worklog_table(worklogs: list) -> Table:
                         if text_item.get("text"):
                             comment += text_item["text"]
 
-        table.add_row(
-            worklog.get("id", ""),
-            author,
-            time_spent,
-            started,
-            comment[:47] + "..." if len(comment) > 50 else comment,
-        )
+        lines.append(f"{worklog.get('id', '')}\t{author}\t{time_spent}\t{started}\t{comment}")
 
-    return table
+    return "\n".join(lines)
 
 
 @app.command("list")
@@ -75,13 +63,13 @@ def list_worklogs(
 
         if table:
             worklogs_table = format_worklog_table(result.get("worklogs", []))
-            console.print(worklogs_table)
+            print(worklogs_table)
         else:
-            console.print(f"[bold blue]Worklogs for {issue_key}:[/bold blue]")
+            print(f"Worklogs for {issue_key}:")
 
             worklogs = result.get("worklogs", [])
             if not worklogs:
-                console.print("  No worklogs found")
+                print("  No worklogs found")
                 return
 
             total_seconds = 0
@@ -108,12 +96,12 @@ def list_worklogs(
                                 if text_item.get("text"):
                                     comment += text_item["text"]
 
-                console.print(f"\n  [dim]ID:[/dim] {worklog_id}")
-                console.print(f"  [cyan]Author:[/cyan] {author}")
-                console.print(f"  [green]Time Spent:[/green] {time_spent}")
-                console.print(f"  [blue]Started:[/blue] {started}")
+                print(f"\n  ID: {worklog_id}")
+                print(f"  Author: {author}")
+                print(f"  Time Spent: {time_spent}")
+                print(f"  Started: {started}")
                 if comment:
-                    console.print(f"  [white]Comment:[/white] {comment}")
+                    print(f"  Comment: {comment}")
 
                 # Calculate total time (approximate)
                 if worklog.get("timeSpentSeconds"):
@@ -123,7 +111,7 @@ def list_worklogs(
             if total_seconds > 0:
                 hours = total_seconds // 3600
                 minutes = (total_seconds % 3600) // 60
-                console.print(f"\n[bold]Total time logged: {hours}h {minutes}m[/bold]")
+                print(f"\nTotal time logged: {hours}h {minutes}m")
 
     except JiraCliError as e:
         print_error(f"Failed to get worklogs: {e}")
@@ -184,7 +172,7 @@ def add_worklog(
 
         print_success(f"Added {time_spent} worklog to {issue_key}")
         if comment:
-            console.print(f"  Comment: {comment}")
+            print(f"  Comment: {comment}")
 
     except JiraCliError as e:
         print_error(f"Failed to add worklog: {e}")

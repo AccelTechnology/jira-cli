@@ -3,7 +3,6 @@
 import json
 from typing import Optional, List
 import typer
-from rich.console import Console
 
 from ..utils.api import JiraApiClient
 from ..utils.formatting import (
@@ -19,7 +18,6 @@ from ..utils.validation import validate_command
 from ..utils.markdown_to_adf import markdown_to_adf
 from ..exceptions import JiraCliError
 
-console = Console()
 app = typer.Typer(help="Manage Jira issues")
 
 
@@ -94,7 +92,7 @@ def search_issues(
         result = client.search_issues(jql, fields, max_results, start_at)
 
         issues_table = format_issue_table(result.get("issues", []))
-        console.print(issues_table)
+        print(issues_table)
 
     except JiraCliError as e:
         handle_api_error(e, "issues search")
@@ -114,8 +112,8 @@ def get_issue(
         client = JiraApiClient()
         issue = client.get_issue(issue_key, fields)
 
-        issue_panel = format_issue_detail(issue)
-        console.print(issue_panel)
+        issue_detail = format_issue_detail(issue)
+        print(issue_detail)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -399,7 +397,7 @@ def get_transitions(
         transitions = result.get("transitions", [])
         if transitions:
             transitions_table = format_transitions_table(transitions)
-            console.print(transitions_table)
+            print(transitions_table)
         else:
             print_info("No transitions available")
 
@@ -512,7 +510,7 @@ def list_epic_stories(
         result = client.search_issues(jql, fields)
 
         issues_table = format_issue_table(result.get("issues", []))
-        console.print(issues_table)
+        print(issues_table)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -556,7 +554,7 @@ def list_subtasks(
         subtasks = result.get("issues", [])
         if subtasks:
             subtasks_table = format_issue_table(subtasks)
-            console.print(subtasks_table)
+            print(subtasks_table)
         else:
             print_info(f"No subtasks found for {parent_key}")
 
@@ -951,9 +949,6 @@ def show_issue_tree(
         )
         root_fields = root_issue["fields"]
 
-        # Pretty print tree view
-        from rich.tree import Tree
-
         issue_type = root_fields["issuetype"]["name"]
         status = root_fields.get("status", {}).get("name", "N/A")
         assignee = (
@@ -963,11 +958,9 @@ def show_issue_tree(
         )
         summary = root_fields.get("summary", "N/A")
 
-        # Create root tree
-        tree = Tree(f"[bold blue]{issue_key}[/bold blue] {summary}")
-        tree.add(
-            f"[dim]Type: {issue_type} | Status: {status} | Assignee: {assignee}[/dim]"
-        )
+        # Print root issue
+        print(f"{issue_key}\t{summary}")
+        print(f"  Type: {issue_type} | Status: {status} | Assignee: {assignee}")
 
         # Get and display children
         children_result = client.search_issues(
@@ -975,7 +968,8 @@ def show_issue_tree(
             fields=["summary", "issuetype", "status", "assignee"],
         )
 
-        for child in children_result.get("issues", []):
+        children = children_result.get("issues", [])
+        for idx, child in enumerate(children):
             child_fields = child["fields"]
             child_type = child_fields["issuetype"]["name"]
             child_status = child_fields.get("status", {}).get("name", "N/A")
@@ -986,13 +980,9 @@ def show_issue_tree(
             )
             child_summary = child_fields.get("summary", "N/A")
 
-            # Add child to tree
-            child_branch = tree.add(
-                f"[green]{child['key']}[/green] {child_summary}"
-            )
-            child_branch.add(
-                f"[dim]Type: {child_type} | Status: {child_status} | Assignee: {child_assignee}[/dim]"
-            )
+            # Print child
+            print(f"  {child['key']}\t{child_summary}")
+            print(f"    Type: {child_type} | Status: {child_status} | Assignee: {child_assignee}")
 
             # Add subtasks if expand_all is True or if this is a story and we want to show subtasks
             if expand_all or child_type.lower() == "story":
@@ -1011,14 +1001,8 @@ def show_issue_tree(
                     )
                     subtask_summary = subtask_fields.get("summary", "N/A")
 
-                    subtask_branch = child_branch.add(
-                        f"[yellow]{subtask['key']}[/yellow] {subtask_summary}"
-                    )
-                    subtask_branch.add(
-                        f"[dim]Type: Sub-task | Status: {subtask_status} | Assignee: {subtask_assignee}[/dim]"
-                    )
-
-        console.print(tree)
+                    print(f"    {subtask['key']}\t{subtask_summary}")
+                    print(f"      Type: Sub-task | Status: {subtask_status} | Assignee: {subtask_assignee}")
 
     except JiraCliError as e:
         print_error(str(e))
@@ -1123,72 +1107,42 @@ def show_issue_hierarchy(issue_key: str):
                     })
                 hierarchy_data["children"].append(child_data)
 
-        # Pretty print hierarchy
-        console.print(f"\n[bold]Hierarchy for {issue_key}:[/bold]")
+        # Print hierarchy
+        print(f"\nHierarchy for {issue_key}:")
 
         # Show parent
         if hierarchy_data["parent"]:
             parent = hierarchy_data["parent"]
-            console.print(
-                f"[blue]↑ Parent:[/blue] [green]{parent['key']}[/green] {parent['summary']}"
-            )
-            console.print(
-                f"  [dim]Type: {parent['type']} | Status: {parent['status']} | Assignee: {parent['assignee']}[/dim]"
-            )
-            console.print()
+            print(f"Parent: {parent['key']}\t{parent['summary']}")
+            print(f"  Type: {parent['type']} | Status: {parent['status']} | Assignee: {parent['assignee']}")
+            print()
 
         # Show current issue
         current = hierarchy_data["issue"]
-        console.print(
-            f"[bold blue]→ Current:[/bold blue] [green]{current['key']}[/green] {current['summary']}"
-        )
-        console.print(
-            f"  [dim]Type: {current['type']} | Status: {current['status']} | Assignee: {current['assignee']}[/dim]"
-        )
+        print(f"Current: {current['key']}\t{current['summary']}")
+        print(f"  Type: {current['type']} | Status: {current['status']} | Assignee: {current['assignee']}")
 
-        # Show children (stories under epic) with their subtasks in tree format
+        # Show children (stories under epic) with their subtasks
         if hierarchy_data["children"]:
-            console.print(
-                f"\n[blue]↓ Children ({len(hierarchy_data['children'])}):[/blue]"
-            )
-            for idx, child in enumerate(hierarchy_data["children"]):
-                is_last_child = idx == len(hierarchy_data["children"]) - 1
-                tree_char = "└─" if is_last_child else "├─"
-
-                console.print(f"  {tree_char} [green]{child['key']}[/green] {child['summary']}")
-                console.print(
-                    f"     [dim]Type: {child['type']} | Status: {child['status']} | Assignee: {child['assignee']}[/dim]"
-                )
+            print(f"\nChildren ({len(hierarchy_data['children'])}):")
+            for child in hierarchy_data["children"]:
+                print(f"  {child['key']}\t{child['summary']}")
+                print(f"    Type: {child['type']} | Status: {child['status']} | Assignee: {child['assignee']}")
 
                 # Show subtasks for this child
                 if child.get("subtasks"):
-                    continuation = "   " if is_last_child else "│  "
-                    for sub_idx, subtask in enumerate(child["subtasks"]):
-                        is_last_subtask = sub_idx == len(child["subtasks"]) - 1
-                        sub_tree_char = "└─" if is_last_subtask else "├─"
-
-                        console.print(
-                            f"  {continuation} {sub_tree_char} [yellow]{subtask['key']}[/yellow] {subtask['summary']}"
-                        )
-                        console.print(
-                            f"  {continuation}    [dim]Type: {subtask['type']} | Status: {subtask['status']} | Assignee: {subtask['assignee']}[/dim]"
-                        )
+                    for subtask in child["subtasks"]:
+                        print(f"    {subtask['key']}\t{subtask['summary']}")
+                        print(f"      Type: {subtask['type']} | Status: {subtask['status']} | Assignee: {subtask['assignee']}")
         else:
-            console.print("\n[dim]No children[/dim]")
+            print("\nNo children")
 
         # Show direct subtasks (subtasks of current issue, not of children)
         if hierarchy_data["subtasks"]:
-            console.print(
-                f"\n[blue]↓ Subtasks ({len(hierarchy_data['subtasks'])}):[/blue]"
-            )
-            for idx, subtask in enumerate(hierarchy_data["subtasks"]):
-                is_last = idx == len(hierarchy_data["subtasks"]) - 1
-                tree_char = "└─" if is_last else "├─"
-
-                console.print(f"  {tree_char} [yellow]{subtask['key']}[/yellow] {subtask['summary']}")
-                console.print(
-                    f"     [dim]Type: {subtask['type']} | Status: {subtask['status']} | Assignee: {subtask['assignee']}[/dim]"
-                )
+            print(f"\nSubtasks ({len(hierarchy_data['subtasks'])}):")
+            for subtask in hierarchy_data["subtasks"]:
+                print(f"  {subtask['key']}\t{subtask['summary']}")
+                print(f"    Type: {subtask['type']} | Status: {subtask['status']} | Assignee: {subtask['assignee']}")
 
     except JiraCliError as e:
         print_error(str(e))
@@ -1230,18 +1184,18 @@ def list_watchers(
         client = JiraApiClient()
         watchers = client.get_watchers(issue_key)
 
-        console.print(f"[bold blue]Watchers for {issue_key}:[/bold blue]")
+        print(f"Watchers for {issue_key}:")
 
         if watchers.get("watchers"):
             for watcher in watchers["watchers"]:
                 display_name = watcher.get("displayName", "Unknown")
                 account_id = watcher.get("accountId", "")
                 email = watcher.get("emailAddress", "")
-                console.print(f"  • {display_name} ({email}) - {account_id}")
+                print(f"  {display_name}\t{email}\t{account_id}")
         else:
-            console.print("  No watchers found")
+            print("  No watchers found")
 
-        console.print(f"\nTotal watchers: {watchers.get('watchCount', 0)}")
+        print(f"\nTotal watchers: {watchers.get('watchCount', 0)}")
 
     except JiraCliError as e:
         print_error(f"Failed to get watchers: {e}")

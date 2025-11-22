@@ -2,8 +2,6 @@
 
 import typer
 from typing import Optional
-from rich.console import Console
-from rich import print as rprint
 
 from .commands import issues, projects, auth, worklog, attachments
 from .utils.formatting import print_success, print_error, print_info
@@ -16,14 +14,11 @@ from .utils.error_handling import (
 from .utils.validation import validate_command
 from .exceptions import JiraCliError, ValidationError
 
-console = Console()
-
 # Create main app
 app = typer.Typer(
     name="jira-cli",
     help="Command Line Interface for Jira REST API operations",
     add_completion=False,
-    rich_markup_mode="rich",
 )
 
 # Add subcommands
@@ -42,10 +37,8 @@ def version():
     import sys
     from datetime import datetime
 
-    console.print(
-        f"[bold blue]Jira CLI[/bold blue] version: [green]{__version__}[/green]"
-    )
-    console.print(f"Author: {__author__} ({__email__})")
+    print(f"Jira CLI version: {__version__}")
+    print(f"Author: {__author__} ({__email__})")
 
     # Parse version to show install time if it's not a dev version
     if not __version__.startswith("dev."):
@@ -57,16 +50,14 @@ def version():
                 hour, minute = int(time_part[:2]), int(time_part[2:])
 
                 install_time = datetime(int(year), int(month), int(day), hour, minute)
-                console.print(
-                    f"Installed: {install_time.strftime('%Y-%m-%d at %H:%M')}"
-                )
+                print(f"Installed: {install_time.strftime('%Y-%m-%d at %H:%M')}")
         except Exception:
             pass
     else:
-        console.print("[yellow]Development version[/yellow]")
+        print("Development version")
 
-    console.print(f"Python: {sys.version.split()[0]}")
-    console.print(f"Platform: {sys.platform}")
+    print(f"Python: {sys.version.split()[0]}")
+    print(f"Platform: {sys.platform}")
 
 
 @app.command("config")
@@ -91,12 +82,9 @@ def show_config(
         "JIRA_API_TOKEN": "Set" if os.getenv("JIRA_API_TOKEN") else "Not set",
     }
 
-    console.print("[bold]Current Configuration:[/bold]")
+    print("Current Configuration:")
     for key, value in config_info.items():
-        if key == "JIRA_API_TOKEN":
-            console.print(f"  {key}: {value}")
-        else:
-            console.print(f"  {key}: {value}")
+        print(f"  {key}: {value}")
 
     # Show validation status
     if is_valid:
@@ -104,10 +92,8 @@ def show_config(
     else:
         print_error("Configuration issues found:")
         for issue in issues:
-            console.print(f"  • {issue}")
-        console.print(
-            "\n[dim]Run 'jira-cli config --setup-help' for setup instructions[/dim]"
-        )
+            print(f"  - {issue}")
+        print("\nRun 'jira-cli config --setup-help' for setup instructions")
 
 
 @app.command("search")

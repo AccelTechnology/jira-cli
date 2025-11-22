@@ -4,9 +4,6 @@ import os
 import json
 from typing import Optional
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 from pathlib import Path
 
 from ..utils.api import JiraApiClient
@@ -15,7 +12,6 @@ from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
 
-console = Console()
 app = typer.Typer(help="Manage issue attachments")
 
 
@@ -31,15 +27,12 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 
-def format_attachments_table(attachments: list) -> Table:
-    """Format attachments data as a table."""
-    table = Table(title="Attachments")
-    table.add_column("ID", style="dim")
-    table.add_column("Filename", style="cyan")
-    table.add_column("Size", style="green")
-    table.add_column("Author", style="blue")
-    table.add_column("Created", style="white")
+def format_attachments_table(attachments: list) -> str:
+    """Format attachments data as plain text."""
+    if not attachments:
+        return "No attachments found."
 
+    lines = []
     for attachment in attachments:
         size = format_size(attachment.get("size", 0))
         author = attachment.get("author", {}).get("displayName", "Unknown")
@@ -55,19 +48,13 @@ def format_attachments_table(attachments: list) -> Table:
             except:
                 pass
 
-        table.add_row(
-            attachment.get("id", ""),
-            attachment.get("filename", ""),
-            size,
-            author,
-            created,
-        )
+        lines.append(f"{attachment.get('id', '')}\t{attachment.get('filename', '')}\t{size}\t{author}\t{created}")
 
-    return table
+    return "\n".join(lines)
 
 
-def format_attachment_detail(attachment: dict) -> Panel:
-    """Format attachment details as a panel."""
+def format_attachment_detail(attachment: dict) -> str:
+    """Format attachment details as plain text."""
     from datetime import datetime
 
     attachment_id = attachment.get("id", "Unknown")
@@ -85,14 +72,12 @@ def format_attachment_detail(attachment: dict) -> Panel:
         except:
             pass
 
-    content = f"""[bold]Filename:[/bold] {filename}
-[bold]ID:[/bold] {attachment_id}
-[bold]Size:[/bold] {size}
-[bold]MIME Type:[/bold] {mime_type}
-[bold]Author:[/bold] {author}
-[bold]Created:[/bold] {created}"""
-
-    return Panel(content, title="Attachment Details", title_align="left")
+    return f"""Filename: {filename}
+ID: {attachment_id}
+Size: {size}
+MIME Type: {mime_type}
+Author: {author}
+Created: {created}"""
 
 
 @app.command("list")
@@ -106,7 +91,7 @@ def list_attachments(
 
         attachments = issue.get("fields", {}).get("attachment", [])
 
-        console.print(f"[bold blue]Attachments for {issue_key}:[/bold blue]")
+        print(f"Attachments for {issue_key}:")
 
         if not attachments:
             print_info("No attachments found")
@@ -131,17 +116,17 @@ def list_attachments(
                 except:
                     pass
 
-            console.print(f"\n  [dim]ID:[/dim] {attachment_id}")
-            console.print(f"  [cyan]Filename:[/cyan] {filename}")
-            console.print(f"  [green]Size:[/green] {size}")
-            console.print(f"  [blue]Author:[/blue] {author}")
-            console.print(f"  [white]Created:[/white] {created}")
+            print(f"\n  ID: {attachment_id}")
+            print(f"  Filename: {filename}")
+            print(f"  Size: {size}")
+            print(f"  Author: {author}")
+            print(f"  Created: {created}")
 
             total_size += size_bytes
 
         # Display total size
         if total_size > 0:
-            console.print(f"\n[bold]Total size: {format_size(total_size)}[/bold]")
+            print(f"\nTotal size: {format_size(total_size)}")
 
     except JiraCliError as e:
         print_error(f"Failed to get attachments: {e}")
@@ -310,11 +295,11 @@ def delete_all_attachments(
             print_info(f"Found {len(attachments)} attachment(s) on {issue_key}")
 
         # Show what will be deleted
-        console.print("\n[bold]Attachments to delete:[/bold]")
+        print("\nAttachments to delete:")
         for att in attachments:
             filename = att.get("filename", "Unknown")
             size = format_size(att.get("size", 0))
-            console.print(f"  • {filename} ({size})")
+            print(f"  {filename} ({size})")
 
         if not yes:
             if not typer.confirm(f"\nDelete {len(attachments)} attachment(s)?"):
@@ -329,10 +314,10 @@ def delete_all_attachments(
                 attachment_id = att.get("id")
                 filename = att.get("filename", "Unknown")
                 client.delete_attachment(attachment_id)
-                console.print(f"  ✓ Deleted: {filename}")
+                print(f"  Deleted: {filename}")
                 deleted += 1
             except Exception as e:
-                console.print(f"  ✗ Failed: {filename} - {e}")
+                print(f"  Failed: {filename} - {e}")
                 failed += 1
 
         print_success(f"Deleted {deleted} attachment(s)")
@@ -382,7 +367,7 @@ def delete_duplicate_attachments(
 
         to_delete = []
         for filename, atts in duplicates.items():
-            console.print(f"\n[bold cyan]{filename}[/bold cyan] ({len(atts)} copies)")
+            print(f"\n{filename} ({len(atts)} copies)")
 
             # Sort by created date
             sorted_atts = sorted(atts, key=lambda a: a.get("created", ""))
@@ -395,9 +380,9 @@ def delete_duplicate_attachments(
                 keep_att = sorted_atts[0]
                 delete_atts = sorted_atts[1:]
 
-            console.print(f"  Keep: {keep_att.get('created', 'Unknown')} (ID: {keep_att.get('id')})")
+            print(f"  Keep: {keep_att.get('created', 'Unknown')} (ID: {keep_att.get('id')})")
             for att in delete_atts:
-                console.print(f"  Delete: {att.get('created', 'Unknown')} (ID: {att.get('id')})")
+                print(f"  Delete: {att.get('created', 'Unknown')} (ID: {att.get('id')})")
                 to_delete.append(att)
 
         if not yes:
@@ -413,10 +398,10 @@ def delete_duplicate_attachments(
                 attachment_id = att.get("id")
                 filename = att.get("filename", "Unknown")
                 client.delete_attachment(attachment_id)
-                console.print(f"  ✓ Deleted: {filename} ({att.get('created', 'Unknown')})")
+                print(f"  Deleted: {filename} ({att.get('created', 'Unknown')})")
                 deleted += 1
             except Exception as e:
-                console.print(f"  ✗ Failed: {filename} - {e}")
+                print(f"  Failed: {filename} - {e}")
                 failed += 1
 
         print_success(f"Deleted {deleted} duplicate attachment(s)")
@@ -437,8 +422,8 @@ def get_attachment_info(
         client = JiraApiClient()
         attachment = client.get_attachment(attachment_id)
 
-        attachment_panel = format_attachment_detail(attachment)
-        console.print(attachment_panel)
+        attachment_detail = format_attachment_detail(attachment)
+        print(attachment_detail)
 
     except JiraCliError as e:
         print_error(f"Failed to get attachment info: {e}")

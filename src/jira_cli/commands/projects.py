@@ -3,7 +3,6 @@
 import json
 from typing import Optional
 import typer
-from rich.console import Console
 
 from ..utils.api import JiraApiClient
 from ..utils.formatting import (
@@ -18,7 +17,6 @@ from ..utils.formatting import (
 )
 from ..exceptions import JiraCliError
 
-console = Console()
 app = typer.Typer(help="Manage Jira projects")
 
 
@@ -30,7 +28,7 @@ def list_projects():
         projects = client.get_projects()
 
         projects_table = format_project_table(projects)
-        console.print(projects_table)
+        print(projects_table)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -46,8 +44,8 @@ def get_project(
         client = JiraApiClient()
         project = client.get(f"project/{project_key}")
 
-        project_panel = format_project_detail(project)
-        console.print(project_panel)
+        project_detail = format_project_detail(project)
+        print(project_detail)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -94,7 +92,7 @@ def list_issue_types(
             )
 
         types_table = format_issue_types_table(issue_types)
-        console.print(types_table)
+        print(types_table)
 
     except JiraCliError as e:
         print_error(str(e))
@@ -113,7 +111,7 @@ def list_versions(
         versions = result.get("values", [])
         if versions:
             versions_table = format_versions_table(versions)
-            console.print(versions_table)
+            print(versions_table)
         else:
             print_info(f"No versions found for project {project_key}")
 
@@ -134,7 +132,7 @@ def list_components(
         components = result.get("values", [])
         if components:
             components_table = format_components_table(components)
-            console.print(components_table)
+            print(components_table)
         else:
             print_info(f"No components found for project {project_key}")
 

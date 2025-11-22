@@ -1,7 +1,6 @@
 """Authentication-related commands for Jira CLI."""
 
 import typer
-from rich.console import Console
 
 from ..utils.api import JiraApiClient
 from ..utils.formatting import (
@@ -12,7 +11,6 @@ from ..utils.formatting import (
 )
 from ..exceptions import JiraCliError
 
-console = Console()
 app = typer.Typer(help="Authentication and user info")
 
 
@@ -23,8 +21,8 @@ def whoami():
         client = JiraApiClient()
         user = client.get_current_user()
 
-        user_panel = format_user_info(user)
-        console.print(user_panel)
+        user_info = format_user_info(user)
+        print(user_info)
 
     except JiraCliError as e:
         print_error(str(e))
