@@ -38,21 +38,25 @@ def main():
             sys.exit(0)
     
     try:
-        # Install in development mode
+        # Install package (pip install copies files, unlike setup.py develop which symlinks)
         print("📦 Installing package...")
         result = subprocess.run([
-            sys.executable, 'setup.py', 'develop'
+            sys.executable, '-m', 'pip', 'install', '.'
         ], check=True, capture_output=True, text=True)
-        
-        # Extract version from output
+
+        # Get installed version
+        version_result = subprocess.run([
+            sys.executable, '-m', 'pip', 'show', 'jira-cli'
+        ], capture_output=True, text=True)
+
         version = None
-        for line in result.stdout.split('\n'):
-            if 'Version' in line and 'written to' in line:
-                version = line.split('Version ')[1].split(' written')[0]
+        for line in version_result.stdout.split('\n'):
+            if line.startswith('Version:'):
+                version = line.split(':', 1)[1].strip()
                 break
-        
+
         print("✅ Installation completed successfully!")
-        
+
         if version:
             # Parse and display install time
             try:
@@ -60,7 +64,7 @@ def main():
                 if len(parts) == 4:
                     year, month, day, time_part = parts
                     hour, minute = int(time_part[:2]), int(time_part[2:])
-                    
+
                     install_time = datetime(int(year), int(month), int(day), hour, minute)
                     print(f"📅 Version: {version}")
                     print(f"🕐 Installed: {install_time.strftime('%Y-%m-%d at %H:%M')}")
