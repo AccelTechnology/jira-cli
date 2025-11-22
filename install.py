@@ -4,6 +4,7 @@ Install script for Jira CLI with timestamped versioning.
 This script installs jira-cli with a version based on the current timestamp.
 """
 
+import argparse
 import os
 import sys
 import subprocess
@@ -12,19 +13,24 @@ from datetime import datetime
 
 def main():
     """Install jira-cli with timestamped version."""
+    parser = argparse.ArgumentParser(description='Install Jira CLI')
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Skip confirmation prompts (non-interactive mode)')
+    args = parser.parse_args()
+
     print("🚀 Installing Jira CLI...")
-    
+
     # Check if we're in the right directory
     if not os.path.exists('setup.py'):
         print("❌ Error: setup.py not found. Please run this script from the jira-cli directory.")
         sys.exit(1)
-    
+
     # Check if we're in a virtual environment
     in_venv = hasattr(sys, 'real_prefix') or (
         hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
     )
-    
-    if not in_venv:
+
+    if not in_venv and not args.yes:
         print("⚠️  Warning: You're not in a virtual environment.")
         response = input("Do you want to continue? (y/N): ").lower()
         if response != 'y':
