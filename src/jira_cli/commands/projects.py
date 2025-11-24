@@ -17,7 +17,7 @@ from ..utils.formatting import (
 )
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Manage Jira projects")
+app = typer.Typer(help="Manage Jira projects", pretty_exceptions_enable=False)
 
 
 @app.command("list")

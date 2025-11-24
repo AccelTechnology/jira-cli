@@ -11,7 +11,7 @@ from ..utils.formatting import (
 )
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Authentication and user info")
+app = typer.Typer(help="Authentication and user info", pretty_exceptions_enable=False)
 
 
 @app.command("whoami")

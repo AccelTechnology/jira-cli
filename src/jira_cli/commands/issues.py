@@ -18,7 +18,7 @@ from ..utils.validation import validate_command
 from ..utils.markdown_to_adf import markdown_to_adf
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Manage Jira issues")
+app = typer.Typer(help="Manage Jira issues", pretty_exceptions_enable=False)
 
 
 def read_description_from_source(

@@ -1,5 +1,28 @@
 """Main CLI entry point for Jira CLI."""
 
+# Patch Typer's Rich error formatting BEFORE importing typer
+# This must happen before any typer imports to take effect
+def _patch_typer_rich_errors():
+    """Patch Typer to use plain text error formatting instead of Rich panels."""
+    try:
+        import typer.rich_utils as rich_utils
+        import sys
+
+        def plain_rich_format_error(err):
+            """Plain text error formatter (no Rich panels)."""
+            if hasattr(err, 'format_message'):
+                error_msg = err.format_message()
+            else:
+                error_msg = str(err)
+            print(f"Error: {error_msg}", file=sys.stderr)
+
+        # Patch the rich_format_error function
+        rich_utils.rich_format_error = plain_rich_format_error
+    except (ImportError, AttributeError):
+        pass
+
+_patch_typer_rich_errors()
+
 import typer
 from typing import Optional
 
@@ -19,6 +42,7 @@ app = typer.Typer(
     name="jira-cli",
     help="Command Line Interface for Jira REST API operations",
     add_completion=False,
+    pretty_exceptions_enable=False,
 )
 
 # Add subcommands

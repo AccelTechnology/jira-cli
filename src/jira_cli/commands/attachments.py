@@ -12,7 +12,7 @@ from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Manage issue attachments")
+app = typer.Typer(help="Manage issue attachments", pretty_exceptions_enable=False)
 
 
 def format_size(size_bytes: int) -> str:
