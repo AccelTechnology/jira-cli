@@ -21,40 +21,36 @@ from ..exceptions import JiraCliError
 app = typer.Typer(help="Manage Jira issues", pretty_exceptions_enable=False)
 
 
-def read_description_from_source(
-    description: Optional[str], file_path: Optional[str]
-) -> Optional[str]:
-    """Read description from direct input or file.
+def read_description_from_file(file_path: Optional[str]) -> Optional[str]:
+    """Read description from file.
 
     Args:
-        description: Direct description text
         file_path: Path to file containing description
 
     Returns:
-        Description text or None if neither provided
+        Description text or None if not provided
 
     Raises:
         JiraCliError: If file not found or cannot be read
     """
-    if description and file_path:
-        raise JiraCliError("Cannot specify both --description and --description-file")
+    if not file_path:
+        return None
 
-    if file_path:
-        try:
-            import os
+    try:
+        import os
 
-            if not os.path.exists(file_path):
-                raise JiraCliError(f"Description file not found: {file_path}")
+        if not os.path.exists(file_path):
+            raise JiraCliError(f"Description file not found: {file_path}")
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if not content:
-                    print_info(f"Warning: Description file {file_path} is empty")
-                return content
-        except Exception as e:
-            raise JiraCliError(f"Failed to read description file {file_path}: {str(e)}")
-
-    return description
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if not content:
+                print_info(f"Warning: Description file {file_path} is empty")
+            return content
+    except JiraCliError:
+        raise
+    except Exception as e:
+        raise JiraCliError(f"Failed to read description file {file_path}: {str(e)}")
 
 
 @app.command("search")
@@ -132,9 +128,6 @@ def create_issue(
     project_key: str = typer.Option(..., "--project", "-p", help="Project key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Issue summary"),
     issue_type: str = typer.Option("Task", "--type", "-t", help="Issue type"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Issue description"
-    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -199,8 +192,8 @@ def create_issue(
             else:
                 print_info(f"Could not validate issue type against project: {e}")
 
-        # Read description from source
-        final_description = read_description_from_source(description, description_file)
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         # Handle issue type specification - use ID for subtasks to avoid ambiguity
         issue_type_field = {"name": issue_type}
@@ -269,9 +262,6 @@ def create_issue(
 def update_issue(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
     summary: Optional[str] = typer.Option(None, "--summary", "-s", help="New summary"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="New description"
-    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -295,8 +285,8 @@ def update_issue(
     try:
         client = JiraApiClient()
 
-        # Read description from source
-        final_description = read_description_from_source(description, description_file)
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         fields = {}
 
@@ -328,17 +318,17 @@ def update_issue(
                 expected="One or more update parameters",
                 examples=[
                     f"jira-cli issues update {issue_key} --summary 'New summary'",
-                    f"jira-cli issues update {issue_key} --description 'New description'",
+                    f"jira-cli issues update {issue_key} --description-file description.md",
                     f"jira-cli issues update {issue_key} --assignee user@company.com",
                     f"jira-cli issues update {issue_key} --priority High --due-date 2025-12-31",
                 ],
                 suggestions=[
                     "Use --summary to update the issue summary",
-                    "Use --description to update the issue description",
+                    "Use --description-file to update the description from a file",
                     "Use --assignee to change the assignee",
                     "Use --priority to change the priority",
                     "Use --due-date to set or change the due date",
-                    "Use --labels to set issue labels",
+                    "Use --label to set issue labels",
                     "Multiple fields can be updated in one command",
                 ],
                 command_context="issues update",
@@ -426,17 +416,58 @@ def transition_issue(
 
 
 @app.command("comment")
+@validate_command(issue_key_params=["issue_key"], command_context="issues comment")
 def add_comment(
     issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
-    body: str = typer.Argument(..., help="Comment text"),
+    file_path: str = typer.Option(
+        ..., "--file", "-f", help="Path to file containing comment text"
+    ),
 ):
-    """Add comment to issue."""
+    """Add comment to issue from file."""
     try:
+        import os
+
+        if not os.path.exists(file_path):
+            ErrorFormatter.print_formatted_error(
+                "File Not Found",
+                f"Comment file not found: {file_path}",
+                received=f"File path: '{file_path}'",
+                expected="Path to an existing file containing comment text",
+                examples=[
+                    f"jira-cli issues comment {issue_key} --file comment.md",
+                    f"jira-cli issues comment {issue_key} -f /path/to/comment.txt",
+                ],
+                suggestions=[
+                    "Verify the file path is correct",
+                    "Create the file with your comment content first",
+                    "Use absolute path if relative path doesn't work",
+                ],
+                command_context="issues comment",
+            )
+            raise typer.Exit(1)
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            body = f.read().strip()
+
+        if not body:
+            ErrorFormatter.print_formatted_error(
+                "Empty Comment File",
+                f"Comment file is empty: {file_path}",
+                received=f"Empty file: '{file_path}'",
+                expected="File with comment content",
+                suggestions=[
+                    "Add comment text to the file before running this command",
+                ],
+                command_context="issues comment",
+            )
+            raise typer.Exit(1)
+
         client = JiraApiClient()
         result = client.add_comment(issue_key, body)
 
         comment_id = result.get("id")
         print_success(f"Comment added to {issue_key} (ID: {comment_id})")
+        print_info(f"Comment from file: {file_path}")
 
     except JiraCliError as e:
         print_error(str(e))
@@ -573,9 +604,6 @@ def list_subtasks(
 def create_subtask(
     parent_key: str = typer.Option(..., "--parent", "-p", help="Parent issue key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Subtask summary"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Subtask description"
-    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -594,8 +622,8 @@ def create_subtask(
     try:
         client = JiraApiClient()
 
-        # Read description from source
-        final_description = read_description_from_source(description, description_file)
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         # Get parent issue to extract project information and validate parent exists
         try:
@@ -731,8 +759,8 @@ def unlink_subtask(
 @app.command("create-epic")
 def create_epic(
     summary: str = typer.Option(..., "--summary", "-s", help="Epic summary"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Epic description (supports markdown)"
+    description_file: Optional[str] = typer.Option(
+        None, "--description-file", "-f", help="Read description from file"
     ),
     project_key: str = typer.Option("ACCELERP", "--project", "-p", help="Project key"),
     assignee: Optional[str] = typer.Option(
@@ -744,15 +772,13 @@ def create_epic(
     due_date: Optional[str] = typer.Option(
         None, "--due-date", help="Due date in YYYY-MM-DD format"
     ),
-    no_markdown: bool = typer.Option(
-        False,
-        "--no-markdown",
-        help="Treat description as plain text (disable markdown parsing)",
-    ),
 ):
     """Create a new epic."""
     try:
         client = JiraApiClient()
+
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         epic_data = {
             "fields": {
@@ -762,8 +788,8 @@ def create_epic(
             }
         }
 
-        if description:
-            epic_data["fields"]["description"] = markdown_to_adf(description)
+        if final_description:
+            epic_data["fields"]["description"] = markdown_to_adf(final_description)
 
         if assignee:
             epic_data["fields"]["assignee"] = {"accountId": assignee}
@@ -788,9 +814,6 @@ def create_epic(
 def create_epic_command(
     project_key: str = typer.Option(..., "--project", "-p", help="Project key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Epic summary"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Epic description"
-    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -815,8 +838,8 @@ def create_epic_command(
     try:
         client = JiraApiClient()
 
-        # Read description from source
-        final_description = read_description_from_source(description, description_file)
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         # Resolve assignee if email provided
         account_id = None
@@ -1276,9 +1299,6 @@ def create_story_command(
         ..., "--epic", "-e", help="Epic key to create story under"
     ),
     summary: str = typer.Option(..., "--summary", "-s", help="Story summary"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Story description"
-    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -1306,8 +1326,8 @@ def create_story_command(
     try:
         client = JiraApiClient()
 
-        # Read description from source
-        final_description = read_description_from_source(description, description_file)
+        # Read description from file
+        final_description = read_description_from_file(description_file)
 
         # Get epic info to determine project
         epic = client.get_issue(epic_key, fields=["project"])
