@@ -18,7 +18,7 @@ from ..utils.validation import validate_command
 from ..utils.markdown_to_adf import markdown_to_adf
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Manage Jira issues", pretty_exceptions_enable=False)
+app = typer.Typer(help="Manage Jira issues", pretty_exceptions_enable=False, rich_markup_mode=None)
 
 
 def read_description_from_file(file_path: Optional[str]) -> Optional[str]:

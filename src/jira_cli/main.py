@@ -43,6 +43,8 @@ app = typer.Typer(
     help="Command Line Interface for Jira REST API operations",
     add_completion=False,
     pretty_exceptions_enable=False,
+    no_args_is_help=True,
+    rich_markup_mode=None,
 )
 
 # Add subcommands

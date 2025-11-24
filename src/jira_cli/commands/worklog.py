@@ -11,7 +11,7 @@ from ..utils.error_handling import ErrorFormatter, handle_api_error
 from ..utils.validation import validate_command
 from ..exceptions import JiraCliError
 
-app = typer.Typer(help="Manage worklogs and time tracking", pretty_exceptions_enable=False)
+app = typer.Typer(help="Manage worklogs and time tracking", pretty_exceptions_enable=False, rich_markup_mode=None)
 
 
 def format_worklog_table(worklogs: list) -> str:
