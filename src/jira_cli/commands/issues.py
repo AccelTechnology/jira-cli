@@ -1293,6 +1293,180 @@ def remove_watcher(
         raise typer.Exit(1)
 
 
+@app.command("change-type")
+@validate_command(issue_key_params=["issue_key"], command_context="issues change-type")
+def change_issue_type(
+    issue_key: str = typer.Argument(..., help="Issue key (e.g., PROJ-123)"),
+    issue_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="New issue type name or ID",
+    ),
+    list_types: bool = typer.Option(
+        False,
+        "--list",
+        "-l",
+        help="List available issue types for this issue",
+    ),
+    list_all: bool = typer.Option(
+        False,
+        "--list-all",
+        help="List all project issue types (including subtasks)",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force change even if not in allowed list (use for subtask type changes)",
+    ),
+):
+    """Change the issue type of an existing issue.
+
+    Examples:
+      jira issues change-type PROJ-123 --list
+      jira issues change-type PROJ-123 --list-all
+      jira issues change-type PROJ-123 --type "Manual Testing" --force
+      jira issues change-type PROJ-123 --type 10133 --force
+    """
+    try:
+        client = JiraApiClient()
+
+        # Get current issue info
+        issue = client.get_issue(issue_key, fields=["issuetype", "summary", "project"])
+        current_type = issue["fields"]["issuetype"]
+        project_key = issue["fields"]["project"]["key"]
+
+        print_info(f"Issue: {issue_key}")
+        print_info(f"Summary: {issue['fields']['summary']}")
+        print_info(f"Current Type: {current_type['name']} (ID: {current_type['id']})")
+        is_current_subtask = current_type.get('subtask', False)
+
+        # Get available issue types using editmeta
+        editmeta = client.get(f"issue/{issue_key}/editmeta")
+
+        if 'issuetype' not in editmeta['fields']:
+            print_error("Issue type cannot be changed for this issue")
+            print_info("This may be due to workflow restrictions or permissions")
+            raise typer.Exit(1)
+
+        allowed_types = editmeta['fields']['issuetype'].get('allowedValues', [])
+
+        # Get all project issue types for --list-all
+        all_project_types = client.get_project_issue_types(project_key)
+
+        if list_all:
+            print_info("\nAll project issue types:")
+            print_info("\n📋 Standard Types:")
+            for ptype in all_project_types:
+                if not ptype.get('subtask'):
+                    current_marker = " (current)" if ptype['id'] == current_type['id'] else ""
+                    print(f"  • {ptype['name']:<20} (ID: {ptype['id']}){current_marker}")
+                    if ptype.get('description'):
+                        print(f"    {ptype['description']}")
+
+            print_info("\n📦 Subtask Types:")
+            for ptype in all_project_types:
+                if ptype.get('subtask'):
+                    current_marker = " (current)" if ptype['id'] == current_type['id'] else ""
+                    print(f"  • {ptype['name']:<20} (ID: {ptype['id']}){current_marker}")
+                    if ptype.get('description'):
+                        print(f"    {ptype['description']}")
+
+            if is_current_subtask:
+                print_info("\nNote: To change between subtask types, use --type with --force")
+                print_info("Example: jira issues change-type ACCELERP-1293 --type 'Manual Testing' --force")
+
+            return
+
+        if list_types or not issue_type:
+            print_info("\nRecommended issue types (from editmeta):")
+            for allowed in allowed_types:
+                subtask_marker = "📦 Subtask" if allowed.get('subtask') else "📋 Standard"
+                current_marker = " (current)" if allowed['id'] == current_type['id'] else ""
+                print(f"  {subtask_marker} - {allowed['name']:<20} (ID: {allowed['id']}){current_marker}")
+                if allowed.get('description'):
+                    print(f"       {allowed['description']}")
+
+            if is_current_subtask:
+                print_info("\nNote: Subtask to subtask changes may require --force")
+                print_info("Use --list-all to see all available issue types")
+
+            if not issue_type:
+                return
+
+        # Find the target issue type
+        target_type = None
+
+        # First check in allowed types
+        if issue_type.isdigit():
+            for allowed in allowed_types:
+                if allowed['id'] == issue_type:
+                    target_type = allowed
+                    break
+        else:
+            for allowed in allowed_types:
+                if allowed['name'].lower() == issue_type.lower():
+                    target_type = allowed
+                    break
+
+        # If not found and force is enabled, check all project types
+        if not target_type and force:
+            if issue_type.isdigit():
+                for ptype in all_project_types:
+                    if ptype['id'] == issue_type:
+                        target_type = ptype
+                        print_info(f"Using --force to change to '{ptype['name']}'")
+                        break
+            else:
+                for ptype in all_project_types:
+                    if ptype['name'].lower() == issue_type.lower():
+                        target_type = ptype
+                        print_info(f"Using --force to change to '{ptype['name']}'")
+                        break
+
+        if not target_type:
+            print_error(f"Issue type '{issue_type}' not found")
+            print_info("\nUse --list to see recommended types")
+            print_info("Use --list-all to see all project types")
+            if not force:
+                print_info("Use --force to attempt changes to subtask types")
+            raise typer.Exit(1)
+
+        # Check if it's the same type
+        if target_type['id'] == current_type['id']:
+            print_info(f"Issue is already of type '{target_type['name']}'")
+            return
+
+        # Perform the change
+        update_data = {
+            "fields": {
+                "issuetype": {
+                    "id": target_type['id']
+                }
+            }
+        }
+
+        client.put(f"issue/{issue_key}", update_data)
+
+        print_success(f"Changed issue type from '{current_type['name']}' to '{target_type['name']}'")
+
+        # Show warning if changing between subtask and non-subtask
+        was_subtask = current_type.get('subtask', False)
+        is_subtask = target_type.get('subtask', False)
+
+        if was_subtask and not is_subtask:
+            print_info("Note: This issue was converted from a subtask to a standard issue")
+            print_info("The parent link has been removed")
+        elif not was_subtask and is_subtask:
+            print_info("Note: This issue was converted to a subtask")
+            print_info("You may need to set a parent issue using: jira issues link-subtask")
+
+    except JiraCliError as e:
+        handle_api_error(e, "issues change-type")
+        raise typer.Exit(1)
+
+
 @app.command("create-story")
 def create_story_command(
     epic_key: str = typer.Option(
