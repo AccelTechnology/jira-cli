@@ -604,6 +604,12 @@ def list_subtasks(
 def create_subtask(
     parent_key: str = typer.Option(..., "--parent", "-p", help="Parent issue key"),
     summary: str = typer.Option(..., "--summary", "-s", help="Subtask summary"),
+    subtask_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Subtask type name or ID (e.g., 'Manual Testing', 'Coding', 'Sub-task'). Defaults to 'Sub-task'",
+    ),
     description_file: Optional[str] = typer.Option(
         None, "--description-file", "-f", help="Read description from file"
     ),
@@ -618,7 +624,13 @@ def create_subtask(
         None, "--due-date", help="Due date in YYYY-MM-DD format"
     ),
 ):
-    """Create a subtask under a parent issue."""
+    """Create a subtask under a parent issue.
+
+    Examples:
+      jira issues create-subtask --parent PROJ-123 --summary "Fix bug"
+      jira issues create-subtask -p PROJ-123 -s "Test feature" --type "Manual Testing"
+      jira issues create-subtask -p PROJ-123 -s "Implement API" -t "Coding"
+    """
     try:
         client = JiraApiClient()
 
@@ -685,6 +697,49 @@ def create_subtask(
         # Create subtask data - issue type resolution is handled in the API layer
         subtask_data = {"fields": {"project": {"key": project_key}, "summary": summary}}
 
+        # Handle subtask type if specified
+        resolved_type = None
+        if subtask_type:
+            # Get project issue types to validate and resolve the subtask type
+            project_types = client.get_project_issue_types(project_key)
+            subtask_types = [t for t in project_types if t.get('subtask')]
+
+            # Try to find the type by ID or name
+            resolved_type = None
+            if subtask_type.isdigit():
+                # Match by ID
+                for st in subtask_types:
+                    if st['id'] == subtask_type:
+                        resolved_type = st
+                        break
+            else:
+                # Match by name (case-insensitive)
+                for st in subtask_types:
+                    if st['name'].lower() == subtask_type.lower():
+                        resolved_type = st
+                        break
+
+            if not resolved_type:
+                from ..utils.error_handling import ErrorFormatter
+                available_types = [f"{t['name']} (ID: {t['id']})" for t in subtask_types]
+                ErrorFormatter.print_formatted_error(
+                    "Invalid Subtask Type",
+                    f"Subtask type '{subtask_type}' is not available for project {project_key}",
+                    received=f"Type: '{subtask_type}'",
+                    expected="Valid subtask type name or ID",
+                    examples=available_types[:3] if available_types else ["Sub-task", "Manual Testing"],
+                    suggestions=[
+                        f"Use one of the available subtask types listed above",
+                        "Omit --type to use the default 'Sub-task' type",
+                    ],
+                    command_context="issues create-subtask",
+                )
+                raise typer.Exit(1)
+
+            # Set the issue type explicitly
+            subtask_data["fields"]["issuetype"] = {"id": resolved_type['id']}
+            print_info(f"Using subtask type: {resolved_type['name']} (ID: {resolved_type['id']})")
+
         if final_description:
             subtask_data["fields"]["description"] = markdown_to_adf(final_description)
 
@@ -703,7 +758,8 @@ def create_subtask(
         result = client.create_subtask(parent_key, subtask_data)
 
         subtask_key = result.get("key")
-        print_success(f"Subtask created: {subtask_key} under parent {parent_key}")
+        subtask_type_name = resolved_type['name'] if subtask_type and resolved_type else "Subtask"
+        print_success(f"{subtask_type_name} created: {subtask_key} under parent {parent_key}")
         if final_description:
             print_info(
                 f"Description: {final_description[:100]}{'...' if len(final_description) > 100 else ''}"
